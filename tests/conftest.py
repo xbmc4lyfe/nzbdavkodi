@@ -9,3 +9,5 @@ for module_name in ["xbmc", "xbmcgui", "xbmcplugin", "xbmcaddon", "xbmcvfs"]:
 
 # Add plugin.video.nzbdav to the path so imports work
 sys.path.insert(0, "plugin.video.nzbdav")
+# Add resources/lib so PTT's absolute internal imports (e.g. "from ptt.adult import ...") resolve
+sys.path.insert(0, "plugin.video.nzbdav/resources/lib")
