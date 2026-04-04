@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<addon id="plugin.video.nzbdav"
+       name="NZB-DAV"
+       version="0.1.0"
+       provider-name="nzbdav">
+    <requires>
+        <import addon="xbmc.python" version="3.0.0"/>
+        <import addon="xbmc.addon" version="21.0.0"/>
+    </requires>
+    <extension point="xbmc.python.pluginsource" library="addon.py">
+        <provides>video</provides>
+    </extension>
+    <extension point="xbmc.addon.metadata">
+        <summary lang="en_GB">NZB-DAV Usenet streaming for Kodi</summary>
+        <description lang="en_GB">Search NZBHydra2 for NZBs and stream via nzbdav WebDAV. Works as a TMDBHelper player.</description>
+        <platform>all</platform>
+        <license>MIT</license>
+    </extension>
+</addon>
