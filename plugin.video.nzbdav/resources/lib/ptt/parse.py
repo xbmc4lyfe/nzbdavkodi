@@ -1,7 +1,7 @@
 import inspect
+import re
+import re as regex
 from typing import Any, Callable, Dict, List, Union
-
-import regex
 
 from .transformers import none
 
@@ -25,23 +25,66 @@ SQUARE_BRACKETS = ["[", "]"]
 PARENTHESES = ["(", ")"]
 BRACKETS = [CURLY_BRACKETS, SQUARE_BRACKETS, PARENTHESES]
 
-RUSSIAN_CAST_REGEX = regex.compile(r"\([^)]*[\u0400-\u04ff][^)]*\)$|(?<=\/.*)\(.*\)$")
-ALT_TITLES_REGEX = regex.compile(rf"[^/|(]*[{NON_ENGLISH_CHARS}][^/|]*[/|]|[/|][^/|(]*[{NON_ENGLISH_CHARS}][^/|]*")
-NOT_ONLY_NON_ENGLISH_REGEX = regex.compile(rf"(?<=[a-zA-Z][^{NON_ENGLISH_CHARS}]+)[{NON_ENGLISH_CHARS}].*[{NON_ENGLISH_CHARS}]|[{NON_ENGLISH_CHARS}].*[{NON_ENGLISH_CHARS}](?=[^{NON_ENGLISH_CHARS}]+[a-zA-Z])")
-NOT_ALLOWED_SYMBOLS_AT_START_AND_END = regex.compile(rf"^[^\w{NON_ENGLISH_CHARS}#[【★]+|[ \-:/\\[|{{(#$&^]+$")
-REMAINING_NOT_ALLOWED_SYMBOLS_AT_START_AND_END = regex.compile(rf"^[^\w{NON_ENGLISH_CHARS}#]+|]$")
-REDUNDANT_SYMBOLS_AT_END = regex.compile(r"[ \-:./\\]+$")
-EMPTY_BRACKETS_REGEX = regex.compile(r"\(\s*\)|\[\s*\]|\{\s*\}")
-PARANTHESES_WITHOUT_CONTENT = regex.compile(r"\(\W*\)|\[\W*\]|\{\W*\}")
-MOVIE_REGEX = regex.compile(r"[[(]movie[)\]]", flags=regex.IGNORECASE)
-STAR_REGEX_1 = regex.compile(r"^[[【★].*[\]】★][ .]?(.+)")
-STAR_REGEX_2 = regex.compile(r"(.+)[ .]?[[【★].*[\]】★]$")
-MP3_REGEX = regex.compile(r"\bmp3$")
-SPACING_REGEX = regex.compile(r"\s+")
-SPECIAL_CHAR_SPACING = regex.compile(r"[\-\+\_\{\}\[\]]\W{2,}")
-SUB_PATTERN = regex.compile(r"_+")
+# RUSSIAN_CAST_REGEX: matches (Cyrillic text) or trailing (...) after a slash.
+# The original used a variable-width lookbehind (?<=\/.*) which re doesn't support.
+# Replaced with a two-step helper function _apply_russian_cast_regex below.
+_RUSSIAN_CAST_PART1 = re.compile(r"\([^)]*[\u0400-\u04ff][^)]*\)$")
+_RUSSIAN_CAST_PART2 = re.compile(r"\(.*\)$")
 
-BEFORE_TITLE_MATCH_REGEX = regex.compile(r"^\[([^[\]]+)]")
+
+def _apply_russian_cast_regex(s: str) -> str:
+    """Remove Russian cast annotations and trailing parenthesised sections after a slash."""
+    s = _RUSSIAN_CAST_PART1.sub("", s)
+    if "/" in s:
+        s = _RUSSIAN_CAST_PART2.sub("", s)
+    return s
+
+
+ALT_TITLES_REGEX = re.compile(
+    rf"[^/|(]*[{NON_ENGLISH_CHARS}][^/|]*[/|]|[/|][^/|(]*[{NON_ENGLISH_CHARS}][^/|]*"
+)
+
+# NOT_ONLY_NON_ENGLISH_REGEX: the first alternative used a variable-width lookbehind.
+# Replaced with a helper function _apply_not_only_non_english_regex below.
+_NOT_ONLY_NON_ENG_PART1 = re.compile(
+    rf"[a-zA-Z][^{NON_ENGLISH_CHARS}]+[{NON_ENGLISH_CHARS}].*[{NON_ENGLISH_CHARS}]"
+)
+_NOT_ONLY_NON_ENG_PART2 = re.compile(
+    rf"[{NON_ENGLISH_CHARS}].*[{NON_ENGLISH_CHARS}](?=[^{NON_ENGLISH_CHARS}]+[a-zA-Z])"
+)
+_ENGLISH_PREFIX = re.compile(rf"[a-zA-Z][^{NON_ENGLISH_CHARS}]+")
+
+
+def _apply_not_only_non_english_regex(s: str) -> str:
+    """Remove non-English sections that appear inline within English text."""
+
+    def _keep_english_prefix(m: re.Match) -> str:
+        prefix = _ENGLISH_PREFIX.match(m.group(0))
+        return prefix.group(0) if prefix else ""
+
+    s = _NOT_ONLY_NON_ENG_PART1.sub(_keep_english_prefix, s)
+    s = _NOT_ONLY_NON_ENG_PART2.sub("", s)
+    return s
+
+
+NOT_ALLOWED_SYMBOLS_AT_START_AND_END = re.compile(
+    rf"^[^\w{NON_ENGLISH_CHARS}#[【★]+|[ \-:/\\[|{{(#$&^]+$"
+)
+REMAINING_NOT_ALLOWED_SYMBOLS_AT_START_AND_END = re.compile(
+    rf"^[^\w{NON_ENGLISH_CHARS}#]+|]$"
+)
+REDUNDANT_SYMBOLS_AT_END = re.compile(r"[ \-:./\\]+$")
+EMPTY_BRACKETS_REGEX = re.compile(r"\(\s*\)|\[\s*\]|\{\s*\}")
+PARANTHESES_WITHOUT_CONTENT = re.compile(r"\(\W*\)|\[\W*\]|\{\W*\}")
+MOVIE_REGEX = re.compile(r"[[(]movie[)\]]", flags=re.IGNORECASE)
+STAR_REGEX_1 = re.compile(r"^[[【★].*[\]】★][ .]?(.+)")
+STAR_REGEX_2 = re.compile(r"(.+)[ .]?[[【★].*[\]】★]$")
+MP3_REGEX = re.compile(r"\bmp3$")
+SPACING_REGEX = re.compile(r"\s+")
+SPECIAL_CHAR_SPACING = re.compile(r"[\-\+\_\{\}\[\]]\W{2,}")
+SUB_PATTERN = re.compile(r"_+")
+
+BEFORE_TITLE_MATCH_REGEX = re.compile(r"^\[([^[\]]+)]")
 
 DEBUG_HANDLER = False
 
@@ -64,7 +107,9 @@ def extend_options(options: Dict[str, Any] = {}) -> Dict[str, Any]:
     return options
 
 
-def create_handler_from_regexp(name: str, reg_exp: regex.Pattern, transformer: Callable, options: Dict[str, Any]) -> Callable:
+def create_handler_from_regexp(
+    name: str, reg_exp: regex.Pattern, transformer: Callable, options: Dict[str, Any]
+) -> Callable:
     """
     Create a handler function from a regular expression pattern.
 
@@ -82,30 +127,55 @@ def create_handler_from_regexp(name: str, reg_exp: regex.Pattern, transformer: C
 
         if name in result and options.get("skipIfAlreadyFound", False):
             return None
-        if DEBUG_HANDLER is True or (isinstance(DEBUG_HANDLER, str) and DEBUG_HANDLER in name):
+        if DEBUG_HANDLER is True or (
+            isinstance(DEBUG_HANDLER, str) and DEBUG_HANDLER in name
+        ):
             print(name, "Try to match " + title, "To " + reg_exp.pattern)
         match = reg_exp.search(title)
-        if DEBUG_HANDLER is True or (isinstance(DEBUG_HANDLER, str) and DEBUG_HANDLER in name):
+        if DEBUG_HANDLER is True or (
+            isinstance(DEBUG_HANDLER, str) and DEBUG_HANDLER in name
+        ):
             print("Matched " + str(match))
         if match:
             raw_match = match.group(0)
             clean_match = match.group(1) if len(match.groups()) >= 1 else raw_match
             sig = inspect.signature(transformer)
             param_count = len(sig.parameters)
-            transformed = transformer(clean_match or raw_match, *([result.get(name)] if param_count > 1 else []))
+            transformed = transformer(
+                clean_match or raw_match,
+                *([result.get(name)] if param_count > 1 else []),
+            )
             if isinstance(transformed, str):
                 transformed = transformed.strip()
 
             before_title_match = BEFORE_TITLE_MATCH_REGEX.match(title)
-            is_before_title = before_title_match is not None and raw_match in before_title_match.group(1)
+            is_before_title = (
+                before_title_match is not None
+                and raw_match in before_title_match.group(1)
+            )
 
             other_matches = {k: v for k, v in matched.items() if k != name}
-            is_skip_if_first = options.get("skipIfFirst", False) and other_matches and all(match.start() < other_matches[k]["match_index"] for k in other_matches)
+            is_skip_if_first = (
+                options.get("skipIfFirst", False)
+                and other_matches
+                and all(
+                    match.start() < other_matches[k]["match_index"]
+                    for k in other_matches
+                )
+            )
 
             if transformed is not None and not is_skip_if_first:
-                matched[name] = matched.get(name, {"raw_match": raw_match, "match_index": match.start()})
+                matched[name] = matched.get(
+                    name, {"raw_match": raw_match, "match_index": match.start()}
+                )
                 result[name] = options.get("value", transformed)
-                return {"raw_match": raw_match, "match_index": match.start(), "remove": options.get("remove", False), "skip_from_title": is_before_title or options.get("skipFromTitle", False)}
+                return {
+                    "raw_match": raw_match,
+                    "match_index": match.start(),
+                    "remove": options.get("remove", False),
+                    "skip_from_title": is_before_title
+                    or options.get("skipFromTitle", False),
+                }
         return None
 
     handler.__name__ = name
@@ -124,12 +194,14 @@ def clean_title(raw_title: str) -> str:
     cleaned_title = cleaned_title.replace("_", " ")
     cleaned_title = MOVIE_REGEX.sub("", cleaned_title)
     cleaned_title = NOT_ALLOWED_SYMBOLS_AT_START_AND_END.sub("", cleaned_title)
-    cleaned_title = RUSSIAN_CAST_REGEX.sub("", cleaned_title)
+    cleaned_title = _apply_russian_cast_regex(cleaned_title)
     cleaned_title = STAR_REGEX_1.sub(r"\1", cleaned_title)
     cleaned_title = STAR_REGEX_2.sub(r"\1", cleaned_title)
     cleaned_title = ALT_TITLES_REGEX.sub("", cleaned_title)
-    cleaned_title = NOT_ONLY_NON_ENGLISH_REGEX.sub("", cleaned_title)
-    cleaned_title = REMAINING_NOT_ALLOWED_SYMBOLS_AT_START_AND_END.sub("", cleaned_title)
+    cleaned_title = _apply_not_only_non_english_regex(cleaned_title)
+    cleaned_title = REMAINING_NOT_ALLOWED_SYMBOLS_AT_START_AND_END.sub(
+        "", cleaned_title
+    )
     cleaned_title = EMPTY_BRACKETS_REGEX.sub("", cleaned_title)
     cleaned_title = MP3_REGEX.sub("", cleaned_title)
     cleaned_title = PARANTHESES_WITHOUT_CONTENT.sub("", cleaned_title)
@@ -138,7 +210,9 @@ def clean_title(raw_title: str) -> str:
     # Remove brackets if only one is present
     for open_bracket, close_bracket in BRACKETS:
         if cleaned_title.count(open_bracket) != cleaned_title.count(close_bracket):
-            cleaned_title = cleaned_title.replace(open_bracket, "").replace(close_bracket, "")
+            cleaned_title = cleaned_title.replace(open_bracket, "").replace(
+                close_bracket, ""
+            )
 
     if " " not in cleaned_title and "." in cleaned_title:
         cleaned_title = regex.sub(r"\.", " ", cleaned_title)
@@ -150,19 +224,63 @@ def clean_title(raw_title: str) -> str:
 
 
 LANGUAGES_TRANSLATION_TABLE = {
-    "en": "English", "ja": "Japanese", "zh": "Chinese", "ru": "Russian", "ar": "Arabic", "pt": "Portuguese",
-    "es": "Spanish", "fr": "French", "de": "German", "it": "Italian", "ko": "Korean", "hi": "Hindi", "bn": "Bengali",
-    "pa": "Punjabi", "mr": "Marathi", "gu": "Gujarati", "ta": "Tamil", "te": "Telugu", "kn": "Kannada", "ml": "Malayalam",
-    "th": "Thai", "vi": "Vietnamese", "id": "Indonesian", "tr": "Turkish", "he": "Hebrew", "fa": "Persian", "uk": "Ukrainian",
-    "el": "Greek", "lt": "Lithuanian", "lv": "Latvian", "et": "Estonian", "pl": "Polish", "cs": "Czech", "sk": "Slovak",
-    "hu": "Hungarian", "ro": "Romanian", "bg": "Bulgarian", "sr": "Serbian", "hr": "Croatian", "sl": "Slovenian", "nl": "Dutch",
-    "da": "Danish", "fi": "Finnish", "sv": "Swedish", "no": "Norwegian", "ms": "Malay", "la": "Latino"
+    "en": "English",
+    "ja": "Japanese",
+    "zh": "Chinese",
+    "ru": "Russian",
+    "ar": "Arabic",
+    "pt": "Portuguese",
+    "es": "Spanish",
+    "fr": "French",
+    "de": "German",
+    "it": "Italian",
+    "ko": "Korean",
+    "hi": "Hindi",
+    "bn": "Bengali",
+    "pa": "Punjabi",
+    "mr": "Marathi",
+    "gu": "Gujarati",
+    "ta": "Tamil",
+    "te": "Telugu",
+    "kn": "Kannada",
+    "ml": "Malayalam",
+    "th": "Thai",
+    "vi": "Vietnamese",
+    "id": "Indonesian",
+    "tr": "Turkish",
+    "he": "Hebrew",
+    "fa": "Persian",
+    "uk": "Ukrainian",
+    "el": "Greek",
+    "lt": "Lithuanian",
+    "lv": "Latvian",
+    "et": "Estonian",
+    "pl": "Polish",
+    "cs": "Czech",
+    "sk": "Slovak",
+    "hu": "Hungarian",
+    "ro": "Romanian",
+    "bg": "Bulgarian",
+    "sr": "Serbian",
+    "hr": "Croatian",
+    "sl": "Slovenian",
+    "nl": "Dutch",
+    "da": "Danish",
+    "fi": "Finnish",
+    "sv": "Swedish",
+    "no": "Norwegian",
+    "ms": "Malay",
+    "la": "Latino",
 }
 
 
 def translate_langs(langs: List[str]) -> List[str]:
     """Translate a list of language codes to their corresponding language names."""
-    return [LANGUAGES_TRANSLATION_TABLE.get(lang, "") for lang in langs if lang in LANGUAGES_TRANSLATION_TABLE]
+    return [
+        LANGUAGES_TRANSLATION_TABLE.get(lang, "")
+        for lang in langs
+        if lang in LANGUAGES_TRANSLATION_TABLE
+    ]
 
 
 class Parser:
@@ -189,7 +307,13 @@ class Parser:
     def __init__(self):
         self.handlers: List[Callable] = []
 
-    def add_handler(self, handler_name: str, handler: Union[Callable, regex.Pattern, None] = None, transformer: Union[Callable, None] = None, options: Union[Dict[str, Any], None] = None):
+    def add_handler(
+        self,
+        handler_name: str,
+        handler: Union[Callable, regex.Pattern, None] = None,
+        transformer: Union[Callable, None] = None,
+        options: Union[Dict[str, Any], None] = None,
+    ):
         """
         Add a handler to the parser. The handler can be a function or a regular expression pattern.
 
@@ -200,15 +324,21 @@ class Parser:
         """
         if handler is None and callable(handler_name):
             handler = handler_name
-            setattr(handler, "handler_name", getattr(handler_name, "__name__", "unknown"))
+            setattr(
+                handler, "handler_name", getattr(handler_name, "__name__", "unknown")
+            )
         elif isinstance(handler_name, str) and isinstance(handler, regex.Pattern):
             transformer = transformer if callable(transformer) else none
             options = extend_options(options if isinstance(options, dict) else {})
-            handler = create_handler_from_regexp(handler_name, handler, transformer, options)
+            handler = create_handler_from_regexp(
+                handler_name, handler, transformer, options
+            )
         elif isinstance(handler_name, str) and callable(handler):
             setattr(handler, "handler_name", handler_name)
         else:
-            raise ValueError(f"Handler for {handler_name} should be either a regex pattern or a function. Got {type(handler)}")
+            raise ValueError(
+                f"Handler for {handler_name} should be either a regex pattern or a function. Got {type(handler)}"
+            )
 
         self.handlers.append(handler)
 
@@ -226,9 +356,15 @@ class Parser:
         end_of_title = len(title)
 
         for handler in self.handlers:
-            match_result = handler({"title": title, "result": result, "matched": matched})
+            match_result = handler(
+                {"title": title, "result": result, "matched": matched}
+            )
 
-            if DEBUG_HANDLER is True or (isinstance(DEBUG_HANDLER, str) and hasattr(handler, "handler_name") and DEBUG_HANDLER in getattr(handler, "handler_name", "")):
+            if DEBUG_HANDLER is True or (
+                isinstance(DEBUG_HANDLER, str)
+                and hasattr(handler, "handler_name")
+                and DEBUG_HANDLER in getattr(handler, "handler_name", "")
+            ):
                 print(getattr(handler, "handler_name", "unknown"), match_result, title)
 
             if match_result is None:

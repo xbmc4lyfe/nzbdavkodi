@@ -46,6 +46,7 @@ def resolve(handle, params):
     if not nzo_id:
         dialog.close()
         _notify("NZB-DAV", "Failed to submit NZB to nzbdav")
+        xbmcplugin.setResolvedUrl(handle, False, xbmcgui.ListItem())
         return
 
     start_time = time.time()
@@ -58,10 +59,12 @@ def resolve(handle, params):
             _notify(
                 "NZB-DAV", "Download timed out after {} seconds".format(int(elapsed))
             )
+            xbmcplugin.setResolvedUrl(handle, False, xbmcgui.ListItem())
             return
 
         if dialog.iscanceled():
             dialog.close()
+            xbmcplugin.setResolvedUrl(handle, False, xbmcgui.ListItem())
             return
 
         job_status = get_job_status(nzo_id)
@@ -72,6 +75,7 @@ def resolve(handle, params):
             if status.lower() in ("failed", "deleted"):
                 dialog.close()
                 _notify("NZB-DAV", "Download failed")
+                xbmcplugin.setResolvedUrl(handle, False, xbmcgui.ListItem())
                 return
 
             msg = _STATUS_MESSAGES.get(status, "Status: {}".format(status))

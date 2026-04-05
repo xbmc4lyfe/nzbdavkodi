@@ -1,7 +1,20 @@
+import re
+import re as regex
 from typing import Callable, List, Optional, Union
 
-import arrow
-import regex
+_ORDINAL_RE = re.compile(r"(\d+)(st|nd|rd|th)", re.IGNORECASE)
+
+
+def _arrow_fmt_to_strptime(fmt: str) -> str:
+    """Convert an Arrow-style format string to a Python strptime format string."""
+    fmt = fmt.replace("YYYY", "%Y")
+    fmt = fmt.replace("YY", "%y")
+    fmt = fmt.replace("MMMM", "%B")
+    fmt = fmt.replace("MMM", "%b")
+    fmt = fmt.replace("MM", "%m")
+    fmt = fmt.replace("Do", "%d")  # ordinal day -- suffix stripped before parsing
+    fmt = fmt.replace("DD", "%d")
+    return fmt
 
 
 def none(input_value: str) -> str:
@@ -14,7 +27,9 @@ def none(input_value: str) -> str:
     return input_value
 
 
-def value(val: Union[str, int, Callable[[str], Union[str, int]]]) -> Callable[[str], Union[str, int]]:
+def value(
+    val: Union[str, int, Callable[[str], Union[str, int]]],
+) -> Callable[[str], Union[str, int]]:
     """
     Return a transformer that replaces the input value with a predefined value.
 
@@ -22,7 +37,9 @@ def value(val: Union[str, int, Callable[[str], Union[str, int]]]) -> Callable[[s
     :return: The transformer function.
     """
 
-    def inner(input_value: str, existing_value: Optional[Union[str, int]] = None) -> Union[str, int]:
+    def inner(
+        input_value: str, existing_value: Optional[Union[str, int]] = None
+    ) -> Union[str, int]:
         if isinstance(val, str) and isinstance(input_value, str):
             return val.replace("$1", input_value)
         if callable(val):
@@ -125,12 +142,21 @@ def date(date_format: Union[str, List[str]]) -> Callable[[str], Optional[str]]:
     """
 
     def inner(input_value: str) -> Optional[str]:
+        from datetime import datetime as _datetime
+
         sanitized = regex.sub(r"\W+", " ", input_value).strip()
         sanitized = convert_months(sanitized)
         formats = [date_format] if not isinstance(date_format, list) else date_format
         for fmt in formats:
             try:
-                return arrow.get(sanitized, fmt).format("YYYY-MM-DD")
+                needs_ordinal_strip = "Do" in fmt
+                parse_str = (
+                    _ORDINAL_RE.sub(r"\1", sanitized)
+                    if needs_ordinal_strip
+                    else sanitized
+                )
+                strptime_fmt = _arrow_fmt_to_strptime(fmt)
+                return _datetime.strptime(parse_str, strptime_fmt).strftime("%Y-%m-%d")
             except Exception:
                 continue
         return None
@@ -149,7 +175,9 @@ def range_func(input_str: str) -> Optional[List[int]]:
 
     if len(numbers) == 2 and numbers[0] < numbers[1]:
         return list(range(numbers[0], numbers[1] + 1))
-    if len(numbers) > 2 and all(numbers[i] + 1 == numbers[i + 1] for i in range(len(numbers) - 1)):
+    if len(numbers) > 2 and all(
+        numbers[i] + 1 == numbers[i + 1] for i in range(len(numbers) - 1)
+    ):
         return numbers
     if len(numbers) == 1:
         return numbers
@@ -201,7 +229,9 @@ def year_range(input_value: str) -> Optional[str]:
     return f"{start}-{end}"
 
 
-def array(chain: Optional[Callable[[str], Union[str, Optional[int]]]] = None) -> Callable[[str], List[Union[str, Optional[int]]]]:
+def array(
+    chain: Optional[Callable[[str], Union[str, Optional[int]]]] = None,
+) -> Callable[[str], List[Union[str, Optional[int]]]]:
     """
     Return a transformer that wraps the input value in a list.
 
@@ -215,7 +245,9 @@ def array(chain: Optional[Callable[[str], Union[str, Optional[int]]]] = None) ->
     return inner
 
 
-def uniq_concat(chain: Callable[[str], Union[str, int]]) -> Callable[[str, Optional[List[Union[str, int]]]], List[Union[str, int]]]:
+def uniq_concat(
+    chain: Callable[[str], Union[str, int]],
+) -> Callable[[str, Optional[List[Union[str, int]]]], List[Union[str, int]]]:
     """
     Return a transformer that appends unique values to a list.
 
@@ -223,7 +255,9 @@ def uniq_concat(chain: Callable[[str], Union[str, int]]) -> Callable[[str, Optio
     :return: The transformer function.
     """
 
-    def inner(input_value: str, result: Optional[List[Union[str, int]]] = None) -> List[Union[str, int]]:
+    def inner(
+        input_value: str, result: Optional[List[Union[str, int]]] = None
+    ) -> List[Union[str, int]]:
         if result is None:
             result = []
         output_value = chain(input_value)

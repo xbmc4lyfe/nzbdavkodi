@@ -1,4 +1,4 @@
-import regex
+import re as regex
 
 from ptt.parse import Parser
 from ptt.transformers import boolean
