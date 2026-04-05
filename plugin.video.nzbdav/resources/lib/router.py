@@ -125,10 +125,19 @@ def _handle_play(params):
     if addon.getSetting("auto_select_best").lower() == "true":
         selected = filtered[0]
     else:
-        # Show select dialog with detailed labels
-        labels = [_format_label(item) for item in filtered]
-        dialog = xbmcgui.Dialog()
-        choice = dialog.select("NZB-DAV: {} results".format(len(filtered)), labels)
+        # Build ListItems for a richer two-line select dialog
+        listitems = []
+        for item in filtered:
+            li = xbmcgui.ListItem(
+                label=_format_label(item), label2=item.get("title", "")
+            )
+            listitems.append(li)
+
+        choice = xbmcgui.Dialog().select(
+            "NZB-DAV: {} results".format(len(filtered)),
+            listitems,
+            useDetails=True,
+        )
         if choice < 0:
             return  # User cancelled
         selected = filtered[choice]
@@ -188,62 +197,62 @@ def _handle_search(handle, params):
 
 
 def _format_label(item):
-    """Format a detailed label showing all parsed metadata.
+    """Format a compact label with parsed metadata. No color tags for compatibility.
 
-    Format: [RES] [HDR] [CODEC] [AUDIO] [LANG] | filename | GROUP | INDEXER | SIZE
+    Format: [RES HDR] CODEC AUDIO | SIZE | GROUP | INDEXER | age
+    Line 2 (if using ListItem): filename
     """
     meta = item.get("_meta", {})
-    badges = []
+    tags = []
 
-    # Resolution
+    # Resolution + HDR combined
     res = meta.get("resolution", "")
-    if res:
-        badges.append("[COLOR cyan]{}[/COLOR]".format(res))
-
-    # HDR
     hdr = meta.get("hdr", [])
-    if hdr:
-        badges.append("[COLOR yellow]{}[/COLOR]".format(" ".join(hdr)))
+    if res and hdr:
+        tags.append("{} {}".format(res, "/".join(hdr)))
+    elif res:
+        tags.append(res)
 
     # Video codec
     codec = meta.get("codec", "")
     if codec:
-        badges.append("[COLOR lime]{}[/COLOR]".format(codec))
+        tags.append(codec)
 
-    # Audio
+    # Audio (first only for brevity)
     audio = meta.get("audio", [])
     if audio:
-        badges.append("[COLOR orange]{}[/COLOR]".format(" ".join(audio)))
+        tags.append(audio[0])
 
     # Languages
     langs = meta.get("languages", [])
     if langs:
-        badges.append("[COLOR skyblue]{}[/COLOR]".format(" ".join(langs)))
+        tags.append("/".join(langs))
 
-    # Build badge line
-    badge_str = " ".join(badges) if badges else ""
+    # Build the quality portion
+    quality = " ".join(tags) if tags else "Unknown"
 
-    # Filename
-    title = item.get("title", "")
+    # Size
+    size_str = _format_size(item.get("size"))
 
     # Release group
     group = meta.get("group", "")
-    group_str = "[COLOR mediumpurple]{}[/COLOR]".format(group) if group else ""
 
     # Indexer
     indexer = item.get("indexer", "")
-    indexer_str = "[COLOR gray]{}[/COLOR]".format(indexer) if indexer else ""
-
-    # Size
-    size_str = "[COLOR silver]{}[/COLOR]".format(_format_size(item.get("size")))
 
     # Age
     age = item.get("age", "")
-    age_str = "[COLOR gray]{}[/COLOR]".format(age) if age else ""
 
-    # Compose: badges | filename | group | indexer | size | age
-    parts = [badge_str, title, group_str, indexer_str, size_str, age_str]
-    return " | ".join(p for p in parts if p)
+    # Line 1: [quality] | size | group | indexer | age
+    parts = ["[{}]".format(quality), size_str]
+    if group:
+        parts.append(group)
+    if indexer:
+        parts.append(indexer)
+    if age:
+        parts.append(age)
+
+    return " | ".join(parts)
 
 
 def _display_results(handle, results):
