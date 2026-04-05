@@ -20,17 +20,27 @@ lint-fix:
 
 # Build the addon zip for Kodi installation
 release:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    rm -f plugin.video.nzbdav.zip
-    zip -r plugin.video.nzbdav.zip plugin.video.nzbdav/ \
-        -x "*.pyc" \
-        -x "*__pycache__*" \
-        -x "*.pytest_cache*" \
-        -x "*.DS_Store"
-    echo ""
-    echo "Created plugin.video.nzbdav.zip"
-    echo "Install in Kodi: Settings > Add-ons > Install from zip file"
+    #!/usr/bin/env python3
+    import zipfile, os
+    zip_path = "plugin.video.nzbdav.zip"
+    addon_dir = "plugin.video.nzbdav"
+    skip_dirs = {"__pycache__", ".pytest_cache"}
+    skip_files = {".DS_Store"}
+    skip_ext = {".pyc"}
+    if os.path.exists(zip_path):
+        os.remove(zip_path)
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        for root, dirs, files in os.walk(addon_dir):
+            dirs[:] = sorted(d for d in dirs if d not in skip_dirs)
+            for f in sorted(files):
+                if f in skip_files or os.path.splitext(f)[1] in skip_ext:
+                    continue
+                filepath = os.path.join(root, f)
+                zf.write(filepath, filepath)
+    size = os.path.getsize(zip_path)
+    entries = len(zipfile.ZipFile(zip_path).namelist())
+    print("Created {} ({} files, {:.0f} KB)".format(zip_path, entries, size/1024))
+    print("Install in Kodi: Settings > Add-ons > Install from zip file")
 
 # Run tests then build release
 ship: test release
