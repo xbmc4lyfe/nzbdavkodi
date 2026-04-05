@@ -221,6 +221,15 @@ def parse_title_metadata(title):
         raw_langs = [raw_langs]
 
     group = parsed.get("group", "") or ""
+    quality = parsed.get("quality", "") or ""
+    edition = parsed.get("edition", "") or ""
+    year = parsed.get("year", 0) or 0
+    upscaled = bool(parsed.get("upscaled", False))
+
+    raw_channels = parsed.get("channels", [])
+    if isinstance(raw_channels, str):
+        raw_channels = [raw_channels]
+    channels = raw_channels[0] if raw_channels else ""
 
     return {
         "resolution": resolution,
@@ -229,6 +238,11 @@ def parse_title_metadata(title):
         "codec": codec,
         "languages": raw_langs,
         "group": group,
+        "quality": quality,
+        "edition": edition,
+        "channels": channels,
+        "year": year,
+        "upscaled": upscaled,
     }
 
 
@@ -319,43 +333,87 @@ def _sort_results(results, settings):
     preferred_lower = [g.lower() for g in settings["release_group"]]
     sort_order = settings["sort_order"]
 
-    def _is_preferred(r):
+    # Resolution rank: 4K best (0), then 1080p, 720p, 480p, unknown worst
+    _RES_RANK = {"2160p": 0, "1080p": 1, "720p": 2, "480p": 3}
+
+    # HDR rank: DV best (0), HDR10+ (1), HDR10 (2), HLG (3), none (4)
+    _HDR_RANK = {
+        "Dolby Vision": 0,
+        "HDR10+": 1,
+        "HDR10": 2,
+        "HLG": 3,
+    }
+
+    # Audio rank: TrueHD+Atmos best, then Atmos DD+, TrueHD, DTS:X,
+    # DTS-HD MA, DTS, DD+, DD, AAC, unknown
+    _AUDIO_RANK = {
+        "TrueHD": 1,
+        "Atmos": 0,
+        "DTS:X": 3,
+        "DTS-HD MA": 4,
+        "DTS": 5,
+        "DD+": 6,
+        "DD": 7,
+        "AAC": 8,
+    }
+
+    def _relevance_key(r):
         meta = r.get("_meta", {})
-        return 0 if meta.get("group", "").lower() in preferred_lower else 1
+
+        # 1. Resolution (4K first)
+        res_rank = _RES_RANK.get(meta.get("resolution", ""), 4)
+
+        # 2. Best HDR tier present
+        hdr_list = meta.get("hdr", [])
+        if hdr_list:
+            hdr_rank = min(_HDR_RANK.get(h, 4) for h in hdr_list)
+        else:
+            hdr_rank = 5  # no HDR = worst
+
+        # 3. Preferred release group
+        is_preferred = 0 if meta.get("group", "").lower() in preferred_lower else 1
+
+        # 4. Best audio tier (handle combos like Atmos + TrueHD)
+        audio_list = meta.get("audio", [])
+        if audio_list:
+            ranks = [_AUDIO_RANK.get(a, 9) for a in audio_list]
+            # Atmos + TrueHD combo = rank 0 (best)
+            if 0 in ranks and 1 in ranks:
+                audio_rank = -1
+            else:
+                audio_rank = min(ranks)
+        else:
+            audio_rank = 10
+
+        # 5. Size (larger = better, negate for ascending sort)
+        size = -int(r.get("size", 0) or 0)
+
+        return (res_rank, hdr_rank, is_preferred, audio_rank, size)
 
     if sort_order == 1:
-        # Largest first: negate size for ascending sort
         return sorted(
             results,
-            key=lambda r: (_is_preferred(r), -int(r.get("size", 0) or 0)),
+            key=lambda r: -int(r.get("size", 0) or 0),
         )
     elif sort_order == 2:
-        # Smallest first
         return sorted(
             results,
-            key=lambda r: (_is_preferred(r), int(r.get("size", 0) or 0)),
+            key=lambda r: int(r.get("size", 0) or 0),
         )
     elif sort_order == 3:
-        # Newest first: reverse-sort by pubdate string (RFC 2822 dates
-        # don't sort lexicographically, but this matches the original
-        # behavior and works for same-format dates from a single indexer)
         return sorted(
             results,
-            key=lambda r: (_is_preferred(r), r.get("pubdate", "")),
+            key=lambda r: r.get("pubdate", ""),
             reverse=True,
         )
     elif sort_order == 4:
-        # Oldest first
         return sorted(
             results,
-            key=lambda r: (_is_preferred(r), r.get("pubdate", "")),
+            key=lambda r: r.get("pubdate", ""),
         )
     else:
-        # Relevance: preserve original order, preferred groups first
-        return sorted(
-            results,
-            key=lambda r: (_is_preferred(r), results.index(r)),
-        )
+        # Relevance: resolution > HDR > preferred group > audio > size
+        return sorted(results, key=_relevance_key)
 
 
 def _fallback_parse(title):
@@ -369,6 +427,11 @@ def _fallback_parse(title):
         "hdr": [],
         "languages": [],
         "group": "",
+        "quality": "",
+        "edition": "",
+        "channels": "",
+        "year": 0,
+        "upscaled": False,
     }
 
     t = title.replace("[", ".").replace("]", ".").replace("(", ".").replace(")", ".")
@@ -412,6 +475,50 @@ def _fallback_parse(title):
     if re.search(r"(?i)\bhlg\b", t):
         hdr.append("HLG")
     result["hdr"] = hdr
+
+    # Quality / Source
+    m = re.search(
+        r"(?i)\b(remux|blu[-. ]?ray|bdrip|web[-. ]?dl|webrip|hdtv|dvdrip|hdrip)\b", t
+    )
+    if m:
+        raw_q = m.group(1).upper().replace(" ", "").replace(".", "").replace("-", "")
+        if "REMUX" in raw_q:
+            result["quality"] = "BluRay REMUX"
+        elif "BLURAY" in raw_q or "BDRIP" in raw_q:
+            result["quality"] = "BluRay"
+        elif "WEBDL" in raw_q:
+            result["quality"] = "WEB-DL"
+        elif "WEBRIP" in raw_q:
+            result["quality"] = "WEBRip"
+        elif "HDTV" in raw_q:
+            result["quality"] = "HDTV"
+        else:
+            result["quality"] = raw_q
+
+    # Edition
+    _ed_re = (
+        r"(?i)\b(uncut|unrated|director'?s[. ]?cut|extended[. ]?cut"
+        r"|recut|theatrical|imax|special[. ]?edition)\b"
+    )
+    m = re.search(_ed_re, t)
+    if m:
+        result["edition"] = m.group(1).replace(".", " ")
+
+    # Channels
+    m = re.search(r"\b(7\.1|5\.1|2\.0)\b", t)
+    if m:
+        result["channels"] = m.group(1)
+
+    # Year
+    m = re.search(r"[. (](\d{4})[. )]", t)
+    if m:
+        yr = int(m.group(1))
+        if 1920 <= yr <= 2030:
+            result["year"] = yr
+
+    # Upscaled
+    if re.search(r"(?i)\bupscale[d]?\b", t):
+        result["upscaled"] = True
 
     # Group (last segment after hyphen)
     m = re.search(r"-([A-Za-z0-9]+)(?:\.[a-z]{2,4})?$", title)

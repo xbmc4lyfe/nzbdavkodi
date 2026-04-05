@@ -1,7 +1,6 @@
 """URL routing for plugin:// calls from Kodi / TMDBHelper."""
 
-import os
-from urllib.parse import parse_qs, quote, urlencode, urlparse
+from urllib.parse import parse_qs, urlparse
 
 import xbmc
 
@@ -115,19 +114,46 @@ def _handle_play(params):
         notify("NZB-DAV", "No results found for {}".format(title), 3000)
         return
 
-    progress.update(90, "Opening results...")
+    progress.update(90, "Filtering results...")
+
+    from resources.lib.filter import filter_results
+
+    total_count = len(results)
+    filtered = filter_results(results)
+
     progress.close()
 
-    # Redirect to full-screen directory listing
-    search_params = urlencode({k: v for k, v in params.items() if v})
-    url = "plugin://plugin.video.nzbdav/search?{}".format(search_params)
-    xbmc.executebuiltin("ActivateWindow(videos,{},return)".format(url))
+    if not filtered:
+        notify("NZB-DAV", "No results after filtering for {}".format(title), 3000)
+        return
+
+    # Auto-select best match if enabled
+    import xbmcaddon
+
+    addon = xbmcaddon.Addon()
+    if addon.getSetting("auto_select_best").lower() == "true":
+        best = filtered[0]
+        from resources.lib.resolver import resolve_and_play
+
+        resolve_and_play(best["link"], best["title"])
+        return
+
+    # Show custom results dialog directly (no ActivateWindow needed)
+    from resources.lib.results_dialog import show_results_dialog
+
+    selected = show_results_dialog(
+        filtered, title=title, year=year, total_count=total_count
+    )
+
+    if selected:
+        from resources.lib.resolver import resolve_and_play
+
+        resolve_and_play(selected["link"], selected["title"])
 
 
 def _handle_search(handle, params):
-    """Display search results as a full-screen Kodi directory listing."""
+    """Display search results using the custom full-screen dialog."""
     import xbmcaddon
-    import xbmcgui
     import xbmcplugin
 
     from resources.lib.cache import get_cached, set_cached
@@ -157,6 +183,7 @@ def _handle_search(handle, params):
         xbmcplugin.endOfDirectory(handle, succeeded=False)
         return
 
+    total_count = len(results)
     filtered = filter_results(results)
 
     # Auto-select best match if enabled
@@ -168,77 +195,20 @@ def _handle_search(handle, params):
         resolve_and_play(best["link"], best["title"])
         return
 
-    # Build TMDB poster URL for artwork (if imdb ID available)
-    poster_url = ""
-    fanart_url = ""
-    if imdb:
-        poster_url = _get_tmdb_poster(imdb)
-        fanart_url = poster_url  # Use same image for both
+    # Show custom results dialog
+    from resources.lib.results_dialog import show_results_dialog
 
-    addon_path = addon.getAddonInfo("path")
-    default_icon = os.path.join(addon_path, "resources", "icon.png")
-    default_fanart = os.path.join(addon_path, "resources", "fanart.jpg")
+    selected = show_results_dialog(
+        filtered, title=title, year=year, total_count=total_count
+    )
 
-    for item in filtered:
-        meta = item.get("_meta", {})
+    if selected:
+        from resources.lib.resolver import resolve_and_play
 
-        # Label = PTT parsed info line (shown as primary text)
-        label = _format_info_line(item)
+        resolve_and_play(selected["link"], selected["title"])
 
-        li = xbmcgui.ListItem(label=label)
-
-        # Use plot field to show filename as secondary text below label
-        filename = item.get("title", "")
-
-        # Set video info using InfoTagVideo (Kodi 21+)
-        info_tag = li.getVideoInfoTag()
-        info_tag.setTitle(label)
-        info_tag.setPlot(filename)
-
-        # Set media flags for badges
-        res = meta.get("resolution", "")
-        if res:
-            res_map = {"2160p": 3840, "1080p": 1920, "720p": 1280, "480p": 720}
-            width = res_map.get(res, 0)
-            if width:
-                info_tag.setWidth(width)
-
-        codec = meta.get("codec", "")
-        if codec:
-            # Strip x264/ or x265/ prefix for Kodi's codec flag
-            kodi_codec = codec.split("/")[-1].lower()
-            info_tag.addVideoStream(
-                xbmc.VideoStreamDetail(width=0, height=0, codec=kodi_codec)
-            )
-
-        audio = meta.get("audio", [])
-        if audio:
-            # Map audio to Kodi codec names and channel count
-            audio_codec = audio[0].lower().replace("-", "").replace(" ", "")
-            channels = 6  # Default to 5.1
-            if "atmos" in audio_codec or "7.1" in str(meta):
-                channels = 8
-            elif "stereo" in audio_codec or "2.0" in str(meta):
-                channels = 2
-            info_tag.addAudioStream(
-                xbmc.AudioStreamDetail(channels=channels, codec=audio[0])
-            )
-
-        li.setProperty("IsPlayable", "true")
-
-        # Artwork: use TMDB poster if available, else addon icon
-        thumb = poster_url if poster_url else default_icon
-        fanart = fanart_url if fanart_url else default_fanart
-        li.setArt({"icon": thumb, "thumb": thumb, "poster": thumb, "fanart": fanart})
-
-        url = "plugin://plugin.video.nzbdav/resolve?nzburl={}&title={}".format(
-            quote(item["link"], safe=""),
-            quote(item["title"], safe=""),
-        )
-        xbmcplugin.addDirectoryItem(handle=handle, url=url, listitem=li, isFolder=False)
-
-    xbmcplugin.setContent(handle, "videos")
-    xbmcplugin.endOfDirectory(handle)
+    # Must end the directory or Kodi hangs
+    xbmcplugin.endOfDirectory(handle, succeeded=False)
 
 
 def _format_info_line(item):
