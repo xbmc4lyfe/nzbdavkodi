@@ -14,8 +14,7 @@ def test_player_targets_defined():
 
 @patch("resources.lib.player_installer.xbmcvfs")
 @patch("resources.lib.player_installer.xbmcaddon")
-@patch("resources.lib.player_installer.xbmc")
-def test_get_install_targets_returns_selected(mock_xbmc, mock_addon_mod, mock_vfs):
+def test_get_install_targets_returns_selected(mock_addon_mod, mock_vfs):
     addon = MagicMock()
     addon.getSetting.side_effect = lambda key: {
         "install_tmdbhelper": "true",
@@ -31,10 +30,10 @@ def test_get_install_targets_returns_selected(mock_xbmc, mock_addon_mod, mock_vf
     assert "Seren" in target_names
 
 
+@patch("resources.lib.player_installer._notify")
 @patch("resources.lib.player_installer.xbmcvfs")
 @patch("resources.lib.player_installer.xbmcaddon")
-@patch("resources.lib.player_installer.xbmc")
-def test_install_player_writes_to_targets(mock_xbmc, mock_addon_mod, mock_vfs):
+def test_install_player_writes_to_targets(mock_addon_mod, mock_vfs, mock_notify):
     addon = MagicMock()
     addon.getSetting.side_effect = lambda key: {
         "install_tmdbhelper": "true",
@@ -57,3 +56,19 @@ def test_install_player_writes_to_targets(mock_xbmc, mock_addon_mod, mock_vfs):
     install_player()
 
     mock_vfs.File.assert_called()
+
+
+@patch("resources.lib.player_installer._notify")
+@patch("resources.lib.player_installer.xbmcvfs")
+@patch("resources.lib.player_installer.xbmcaddon")
+def test_install_player_no_targets_selected(mock_addon_mod, mock_vfs, mock_notify):
+    addon = MagicMock()
+    addon.getSetting.side_effect = lambda key: "false"
+    mock_addon_mod.Addon.return_value = addon
+
+    install_player()
+
+    mock_notify.assert_called_once_with(
+        "NZB-DAV", "No install targets selected. Check addon settings."
+    )
+    mock_vfs.File.assert_not_called()

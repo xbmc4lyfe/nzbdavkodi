@@ -6,6 +6,7 @@ from urllib.parse import unquote
 import xbmcgui
 import xbmcplugin
 
+from resources.lib.http_util import notify as _notify
 from resources.lib.nzbdav_api import submit_nzb, get_job_status
 from resources.lib.webdav import check_file_available, get_webdav_stream_url
 
@@ -92,9 +93,3 @@ def resolve(handle, params):
             return
 
         time.sleep(poll_interval)
-
-
-def _notify(heading, message, duration=5000):
-    import xbmc
-
-    xbmc.executebuiltin("Notification({}, {}, {})".format(heading, message, duration))

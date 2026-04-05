@@ -63,84 +63,97 @@ _CODEC_MAP = {
 }
 
 
+def _collect_enabled(addon, pairs):
+    """Return labels for settings that are enabled (true).
+
+    Args:
+        addon: Kodi addon instance
+        pairs: list of (setting_id, label) tuples
+    """
+    return [
+        label
+        for setting_id, label in pairs
+        if addon.getSetting(setting_id).lower() == "true"
+    ]
+
+
+def _csv_setting(addon, key):
+    """Read a comma-separated setting into a stripped list."""
+    val = addon.getSetting(key).strip()
+    if not val:
+        return []
+    return [x.strip() for x in val.split(",") if x.strip()]
+
+
 def _get_filter_settings():
     """Read filter settings from Kodi addon config."""
     import xbmcaddon
 
     addon = xbmcaddon.Addon()
 
-    def _get_bool(key):
-        return addon.getSetting(key).lower() == "true"
+    resolutions = _collect_enabled(
+        addon,
+        [
+            ("filter_2160p", "2160p"),
+            ("filter_1080p", "1080p"),
+            ("filter_720p", "720p"),
+            ("filter_480p", "480p"),
+        ],
+    )
 
-    resolutions = []
-    for res_id, res_label in [
-        ("filter_2160p", "2160p"),
-        ("filter_1080p", "1080p"),
-        ("filter_720p", "720p"),
-        ("filter_480p", "480p"),
-    ]:
-        if _get_bool(res_id):
-            resolutions.append(res_label)
+    hdr = _collect_enabled(
+        addon,
+        [
+            ("filter_hdr10", "HDR10"),
+            ("filter_hdr10plus", "HDR10+"),
+            ("filter_dolby_vision", "Dolby Vision"),
+            ("filter_hlg", "HLG"),
+            ("filter_sdr", "SDR"),
+        ],
+    )
 
-    hdr = []
-    for hdr_id, hdr_label in [
-        ("filter_hdr10", "HDR10"),
-        ("filter_hdr10plus", "HDR10+"),
-        ("filter_dolby_vision", "Dolby Vision"),
-        ("filter_hlg", "HLG"),
-        ("filter_sdr", "SDR"),
-    ]:
-        if _get_bool(hdr_id):
-            hdr.append(hdr_label)
+    audio = _collect_enabled(
+        addon,
+        [
+            ("filter_atmos", "Atmos"),
+            ("filter_truehd", "TrueHD"),
+            ("filter_dtshd_ma", "DTS-HD MA"),
+            ("filter_dtsx", "DTS:X"),
+            ("filter_ddplus", "DD+"),
+            ("filter_dd", "DD"),
+            ("filter_aac", "AAC"),
+        ],
+    )
 
-    audio = []
-    for audio_id, audio_label in [
-        ("filter_atmos", "Atmos"),
-        ("filter_truehd", "TrueHD"),
-        ("filter_dtshd_ma", "DTS-HD MA"),
-        ("filter_dtsx", "DTS:X"),
-        ("filter_ddplus", "DD+"),
-        ("filter_dd", "DD"),
-        ("filter_aac", "AAC"),
-    ]:
-        if _get_bool(audio_id):
-            audio.append(audio_label)
+    codecs = _collect_enabled(
+        addon,
+        [
+            ("filter_hevc", "x265/HEVC"),
+            ("filter_avc", "x264/AVC"),
+            ("filter_av1", "AV1"),
+            ("filter_vp9", "VP9"),
+            ("filter_mpeg2", "MPEG-2"),
+        ],
+    )
 
-    codecs = []
-    for codec_id, codec_label in [
-        ("filter_hevc", "x265/HEVC"),
-        ("filter_avc", "x264/AVC"),
-        ("filter_av1", "AV1"),
-        ("filter_vp9", "VP9"),
-        ("filter_mpeg2", "MPEG-2"),
-    ]:
-        if _get_bool(codec_id):
-            codecs.append(codec_label)
-
-    languages = []
-    for lang_id, lang_label in [
-        ("filter_english", "English"),
-        ("filter_spanish", "Spanish"),
-        ("filter_french", "French"),
-        ("filter_german", "German"),
-        ("filter_italian", "Italian"),
-        ("filter_portuguese", "Portuguese"),
-        ("filter_dutch", "Dutch"),
-        ("filter_russian", "Russian"),
-        ("filter_japanese", "Japanese"),
-        ("filter_korean", "Korean"),
-        ("filter_chinese", "Chinese"),
-        ("filter_arabic", "Arabic"),
-        ("filter_hindi", "Hindi"),
-    ]:
-        if _get_bool(lang_id):
-            languages.append(lang_label)
-
-    def _csv(key):
-        val = addon.getSetting(key).strip()
-        if not val:
-            return []
-        return [x.strip() for x in val.split(",") if x.strip()]
+    languages = _collect_enabled(
+        addon,
+        [
+            ("filter_english", "English"),
+            ("filter_spanish", "Spanish"),
+            ("filter_french", "French"),
+            ("filter_german", "German"),
+            ("filter_italian", "Italian"),
+            ("filter_portuguese", "Portuguese"),
+            ("filter_dutch", "Dutch"),
+            ("filter_russian", "Russian"),
+            ("filter_japanese", "Japanese"),
+            ("filter_korean", "Korean"),
+            ("filter_chinese", "Chinese"),
+            ("filter_arabic", "Arabic"),
+            ("filter_hindi", "Hindi"),
+        ],
+    )
 
     return {
         "resolutions": resolutions,
@@ -148,11 +161,17 @@ def _get_filter_settings():
         "audio": audio,
         "codecs": codecs,
         "languages": languages,
-        "exclude_keywords": [k.lower() for k in _csv("filter_exclude_keywords")],
-        "require_keywords": [k.lower() for k in _csv("filter_require_keywords")],
-        "release_group": [g.lower() for g in _csv("filter_release_group")],
+        "exclude_keywords": [
+            k.lower() for k in _csv_setting(addon, "filter_exclude_keywords")
+        ],
+        "require_keywords": [
+            k.lower() for k in _csv_setting(addon, "filter_require_keywords")
+        ],
+        "release_group": [
+            g.lower() for g in _csv_setting(addon, "filter_release_group")
+        ],
         "exclude_release_group": [
-            g.lower() for g in _csv("filter_exclude_release_group")
+            g.lower() for g in _csv_setting(addon, "filter_exclude_release_group")
         ],
         "min_size": int(addon.getSetting("filter_min_size") or "0"),
         "max_size": int(addon.getSetting("filter_max_size") or "0"),
@@ -272,26 +291,52 @@ def filter_results(results):
 
 
 def _sort_results(results, settings):
-    """Sort results by configured sort order, with preferred groups boosted."""
-    preferred = settings["release_group"]
+    """Sort results by configured sort order, with preferred groups boosted.
+
+    Sort orders:
+        0 = Relevance (original order)
+        1 = Size (largest first)
+        2 = Size (smallest first)
+        3 = Age (newest first) -- pubdate descending
+        4 = Age (oldest first) -- pubdate ascending
+    """
+    preferred_lower = [g.lower() for g in settings["release_group"]]
     sort_order = settings["sort_order"]
 
-    preferred_lower = [g.lower() for g in preferred]
-
-    def sort_key(r):
+    def _is_preferred(r):
         meta = r.get("_meta", {})
-        is_preferred = 0 if meta.get("group", "").lower() in preferred_lower else 1
+        return 0 if meta.get("group", "").lower() in preferred_lower else 1
 
-        if sort_order == 1:
-            return (is_preferred, -int(r.get("size", 0) or 0))
-        elif sort_order == 2:
-            return (is_preferred, int(r.get("size", 0) or 0))
-        elif sort_order == 3:
-            return (is_preferred, r.get("pubdate", ""))
-        elif sort_order == 4:
-            return (is_preferred, r.get("pubdate", ""))
-        else:
-            return (is_preferred, results.index(r))
-
-    reverse = sort_order == 3
-    return sorted(results, key=sort_key, reverse=reverse)
+    if sort_order == 1:
+        # Largest first: negate size for ascending sort
+        return sorted(
+            results,
+            key=lambda r: (_is_preferred(r), -int(r.get("size", 0) or 0)),
+        )
+    elif sort_order == 2:
+        # Smallest first
+        return sorted(
+            results,
+            key=lambda r: (_is_preferred(r), int(r.get("size", 0) or 0)),
+        )
+    elif sort_order == 3:
+        # Newest first: reverse-sort by pubdate string (RFC 2822 dates
+        # don't sort lexicographically, but this matches the original
+        # behavior and works for same-format dates from a single indexer)
+        return sorted(
+            results,
+            key=lambda r: (_is_preferred(r), r.get("pubdate", "")),
+            reverse=True,
+        )
+    elif sort_order == 4:
+        # Oldest first
+        return sorted(
+            results,
+            key=lambda r: (_is_preferred(r), r.get("pubdate", "")),
+        )
+    else:
+        # Relevance: preserve original order, preferred groups first
+        return sorted(
+            results,
+            key=lambda r: (_is_preferred(r), results.index(r)),
+        )

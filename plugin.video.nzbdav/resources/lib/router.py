@@ -56,8 +56,6 @@ def route(argv):
 def _handle_search(handle, params):
     """Search NZBHydra and present filtered results as a directory listing."""
     import xbmcplugin
-    import xbmcgui
-    from urllib.parse import quote
     from resources.lib.hydra import search_hydra
     from resources.lib.filter import filter_results
 
@@ -73,17 +71,23 @@ def _handle_search(handle, params):
     )
 
     if not results:
-        import xbmc
+        from resources.lib.http_util import notify
 
-        xbmc.executebuiltin(
-            "Notification(NZB-DAV, No results found for {}, 3000)".format(title)
-        )
+        notify("NZB-DAV", "No results found for {}".format(title), 3000)
         xbmcplugin.endOfDirectory(handle, succeeded=False)
         return
 
     filtered = filter_results(results)
+    _display_results(handle, filtered)
 
-    for item in filtered:
+
+def _display_results(handle, results):
+    """Add filtered results to the Kodi directory listing."""
+    import xbmcplugin
+    import xbmcgui
+    from urllib.parse import quote
+
+    for item in results:
         label = "{} | {} | {} | {}".format(
             item["title"],
             _format_size(item["size"]),

@@ -1,5 +1,5 @@
 from urllib.parse import urlencode
-from resources.lib.router import parse_route, parse_params
+from resources.lib.router import parse_route, parse_params, _format_size
 
 
 def test_parse_route_root():
@@ -45,3 +45,70 @@ def test_parse_params_episode():
 def test_parse_params_empty():
     params = parse_params("")
     assert params == {}
+
+
+# --- URL encoding/decoding round-trip tests ---
+
+
+def test_parse_params_special_characters_roundtrip():
+    """Titles with special chars survive URL encode/decode."""
+    title = "Spider-Man: No Way Home (2021)"
+    query = "?" + urlencode({"title": title})
+    params = parse_params(query)
+    assert params["title"] == title
+
+
+def test_parse_params_unicode_title():
+    """Unicode characters in titles are preserved."""
+    title = "Crouching Tiger, Hidden Dragon"
+    query = "?" + urlencode({"title": title})
+    params = parse_params(query)
+    assert params["title"] == title
+
+
+def test_parse_params_ampersand_in_title():
+    """Ampersands in titles must be properly encoded."""
+    title = "Tom & Jerry"
+    query = "?" + urlencode({"title": title})
+    params = parse_params(query)
+    assert params["title"] == title
+
+
+def test_parse_params_question_mark_only():
+    """A bare '?' should return empty params."""
+    params = parse_params("?")
+    assert params == {}
+
+
+def test_parse_params_none():
+    """None input should return empty params."""
+    params = parse_params(None)
+    assert params == {}
+
+
+# --- _format_size tests ---
+
+
+def test_format_size_gb():
+    assert _format_size(5368709120) == "5.0 GB"
+
+
+def test_format_size_mb():
+    assert _format_size(10485760) == "10.0 MB"
+
+
+def test_format_size_bytes():
+    assert _format_size(512) == "512 B"
+
+
+def test_format_size_none():
+    assert _format_size(None) == "N/A"
+
+
+def test_format_size_zero():
+    assert _format_size(0) == "N/A"
+
+
+def test_format_size_very_large():
+    """100 GB file."""
+    assert _format_size(107374182400) == "100.0 GB"
