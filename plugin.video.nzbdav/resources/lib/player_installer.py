@@ -59,11 +59,19 @@ def get_install_targets():
 
 
 def install_player():
-    targets = get_install_targets()
+    """Install player JSON via a multi-select dialog."""
+    import xbmcgui
+
+    names = list(PLAYER_TARGETS.keys())
+    dialog = xbmcgui.Dialog()
+    selected = dialog.multiselect("Install NZB-DAV Player To", names)
+
+    if selected is None or len(selected) == 0:
+        return
+
+    targets = [(names[i], PLAYER_TARGETS[names[i]]["path"]) for i in selected]
 
     if not targets:
-        xbmc.log("NZB-DAV: No install targets selected", xbmc.LOGINFO)
-        _notify("NZB-DAV", "No install targets selected. Check addon settings.")
         return
 
     player_content = json.dumps(PLAYER_JSON, indent=4)
