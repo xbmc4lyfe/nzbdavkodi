@@ -1,12 +1,12 @@
+from functools import cache
 from pathlib import Path
 from typing import Set
-from functools import cache
 
 
 @cache
 def load_adult_keywords(filename: str = "combined-keywords.txt") -> Set[str]:
     """Load adult keywords from the keywords file."""
-    keywords_file = Path(__file__).parent / "keywords" / filename
+    keywords_file = Path(__file__).parent / filename
     keywords = set()
 
     with open(keywords_file, "r") as f:
@@ -19,9 +19,11 @@ def load_adult_keywords(filename: str = "combined-keywords.txt") -> Set[str]:
 
 
 def is_adult_content(context):
-    if 'adult' in context['result'] and context['result']['adult']:
+    if "adult" in context["result"] and context["result"]["adult"]:
         return
     """Check if title contains adult content."""
-    title_lower = context['title'].lower()
-    if any(keyword in title_lower for keyword in load_adult_keywords()):#changed this logic to make tests happy
-        context['result']['adult']= True
+    title_lower = context["title"].lower()
+    if any(
+        keyword in title_lower for keyword in load_adult_keywords()
+    ):  # changed this logic to make tests happy
+        context["result"]["adult"] = True
