@@ -97,8 +97,25 @@ def parse_results(xml_text):
             name = attr.get("name", "")
             if name == "size":
                 size = attr.get("value", "")
-            elif name == "indexer":
-                indexer = attr.get("value", "")
+            elif name in ("indexer", "source", "hydraIndexerName"):
+                if not indexer:
+                    indexer = attr.get("value", "")
+
+        # Fallback: indexer from <source> element or category
+        if not indexer:
+            indexer = _get_text(item, "source") or ""
+        if not indexer:
+            source_el = item.find("source")
+            if source_el is not None:
+                indexer = source_el.get("url", "")
+                # Extract domain name from URL
+                if indexer and "/" in indexer:
+                    try:
+                        from urllib.parse import urlparse
+
+                        indexer = urlparse(indexer).hostname or ""
+                    except Exception:
+                        indexer = ""
 
         # Fallback: get size from enclosure
         if not size:
