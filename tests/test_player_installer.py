@@ -1,6 +1,9 @@
 import json
 from unittest.mock import MagicMock, patch
 
+# xbmcgui is imported lazily inside install_player(), so we patch
+# the global mock from conftest (sys.modules["xbmcgui"])
+import xbmcgui
 from resources.lib.player_installer import (
     PLAYER_JSON,
     PLAYER_TARGETS,
@@ -16,12 +19,11 @@ def test_player_targets_defined():
 
 @patch("resources.lib.player_installer._notify")
 @patch("resources.lib.player_installer.xbmcvfs")
-@patch("resources.lib.player_installer.xbmcgui")
-def test_install_player_writes_to_selected(mock_gui, mock_vfs, mock_notify):
+def test_install_player_writes_to_selected(mock_vfs, mock_notify):
     """Dialog selects TMDBHelper, player file gets written."""
     dialog = MagicMock()
     dialog.multiselect.return_value = [0]  # First item (TMDBHelper)
-    mock_gui.Dialog.return_value = dialog
+    xbmcgui.Dialog.return_value = dialog
 
     mock_vfs.exists.return_value = True
     mock_vfs.translatePath.side_effect = lambda p: p.replace(
@@ -38,12 +40,11 @@ def test_install_player_writes_to_selected(mock_gui, mock_vfs, mock_notify):
 
 @patch("resources.lib.player_installer._notify")
 @patch("resources.lib.player_installer.xbmcvfs")
-@patch("resources.lib.player_installer.xbmcgui")
-def test_install_player_cancelled(mock_gui, mock_vfs, mock_notify):
+def test_install_player_cancelled(mock_vfs, mock_notify):
     """User cancels dialog, nothing happens."""
     dialog = MagicMock()
     dialog.multiselect.return_value = None
-    mock_gui.Dialog.return_value = dialog
+    xbmcgui.Dialog.return_value = dialog
 
     install_player()
 
@@ -53,12 +54,11 @@ def test_install_player_cancelled(mock_gui, mock_vfs, mock_notify):
 
 @patch("resources.lib.player_installer._notify")
 @patch("resources.lib.player_installer.xbmcvfs")
-@patch("resources.lib.player_installer.xbmcgui")
-def test_install_player_multiple_targets(mock_gui, mock_vfs, mock_notify):
+def test_install_player_multiple_targets(mock_vfs, mock_notify):
     """Dialog selects TMDBHelper and Seren, both get written."""
     dialog = MagicMock()
     dialog.multiselect.return_value = [0, 2]  # TMDBHelper and Seren
-    mock_gui.Dialog.return_value = dialog
+    xbmcgui.Dialog.return_value = dialog
 
     mock_vfs.exists.return_value = True
     mock_vfs.translatePath.side_effect = lambda p: p.replace(
@@ -74,12 +74,11 @@ def test_install_player_multiple_targets(mock_gui, mock_vfs, mock_notify):
 
 @patch("resources.lib.player_installer._notify")
 @patch("resources.lib.player_installer.xbmcvfs")
-@patch("resources.lib.player_installer.xbmcgui")
-def test_install_player_creates_directory_when_missing(mock_gui, mock_vfs, mock_notify):
+def test_install_player_creates_directory_when_missing(mock_vfs, mock_notify):
     """Should call mkdirs when target dir doesn't exist."""
     dialog = MagicMock()
     dialog.multiselect.return_value = [0]
-    mock_gui.Dialog.return_value = dialog
+    xbmcgui.Dialog.return_value = dialog
 
     mock_vfs.exists.return_value = False
     mock_vfs.translatePath.side_effect = lambda p: p.replace(
@@ -95,12 +94,11 @@ def test_install_player_creates_directory_when_missing(mock_gui, mock_vfs, mock_
 
 @patch("resources.lib.player_installer._notify")
 @patch("resources.lib.player_installer.xbmcvfs")
-@patch("resources.lib.player_installer.xbmcgui")
-def test_install_player_handles_write_failure(mock_gui, mock_vfs, mock_notify):
+def test_install_player_handles_write_failure(mock_vfs, mock_notify):
     """Should catch write exceptions and notify about failure."""
     dialog = MagicMock()
     dialog.multiselect.return_value = [0]
-    mock_gui.Dialog.return_value = dialog
+    xbmcgui.Dialog.return_value = dialog
 
     mock_vfs.translatePath.side_effect = lambda p: p.replace(
         "special://profile", "/home/kodi/.kodi/userdata"
