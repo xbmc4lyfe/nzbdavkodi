@@ -67,85 +67,19 @@ def route(argv):
 
 
 def _handle_play(params):
-    """Full play flow: search, filter, show select dialog, resolve, play.
+    """Open a full-screen directory listing of search results.
 
     Called via executebuiltin://RunPlugin from TMDBHelper player JSON.
+    Redirects to /search via ActivateWindow for a full-screen view.
     """
-    import xbmcaddon
-    import xbmcgui
+    from urllib.parse import urlencode
 
-    from resources.lib.cache import get_cached, set_cached
-    from resources.lib.filter import filter_results
-    from resources.lib.http_util import notify
-    from resources.lib.hydra import search_hydra
-
-    search_type = params.get("type", "movie")
-    title = params.get("title", "")
-    year = params.get("year", "")
-    imdb = params.get("imdb", "")
-    season = params.get("season", "")
-    episode = params.get("episode", "")
-
-    # Show progress spinner while searching
-    progress = xbmcgui.DialogProgress()
-    progress.create("NZB-DAV", "Searching for {}...".format(title))
-    progress.update(10)
-
-    cache_kwargs = dict(year=year, imdb=imdb, season=season, episode=episode)
-    results = get_cached(search_type, title, **cache_kwargs)
-    if results is None:
-        results = search_hydra(
-            search_type, title, year=year, imdb=imdb, season=season, episode=episode
-        )
-        if results:
-            set_cached(search_type, title, results, **cache_kwargs)
-
-    if not results:
-        progress.close()
-        notify("NZB-DAV", "No results found for {}".format(title), 3000)
-        return
-
-    if progress.iscanceled():
-        progress.close()
-        return
-
-    progress.update(60, "Filtering {} results...".format(len(results)))
-    filtered = filter_results(results)
-
-    if not filtered:
-        progress.close()
-        notify("NZB-DAV", "All results filtered out for {}".format(title), 3000)
-        return
-
-    progress.update(90, "Preparing {} results...".format(len(filtered)))
-    progress.close()
-
-    # Auto-select best match if enabled
-    addon = xbmcaddon.Addon()
-    if addon.getSetting("auto_select_best").lower() == "true":
-        selected = filtered[0]
-    else:
-        # Build ListItems for a richer two-line select dialog
-        listitems = []
-        for item in filtered:
-            li = xbmcgui.ListItem(
-                label=_format_label(item), label2=item.get("title", "")
-            )
-            listitems.append(li)
-
-        choice = xbmcgui.Dialog().select(
-            "NZB-DAV: {} results".format(len(filtered)),
-            listitems,
-            useDetails=True,
-        )
-        if choice < 0:
-            return  # User cancelled
-        selected = filtered[choice]
-
-    # Resolve and play
-    from resources.lib.resolver import resolve_and_play
-
-    resolve_and_play(selected["link"], selected["title"])
+    search_params = urlencode(
+        {k: v for k, v in params.items() if v},
+    )
+    url = "plugin://plugin.video.nzbdav/search?{}".format(search_params)
+    xbmc.log("NZB-DAV: Redirecting to full-screen search: {}".format(url), xbmc.LOGINFO)
+    xbmc.executebuiltin("ActivateWindow(videos,{},return)".format(url))
 
 
 def _handle_search(handle, params):
