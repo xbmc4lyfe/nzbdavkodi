@@ -3,9 +3,10 @@
 import json
 import os
 
-import xbmc
 import xbmcaddon
 import xbmcvfs
+
+from resources.lib.http_util import notify as _notify
 
 
 PLAYER_TARGETS = {
@@ -77,7 +78,3 @@ def install_player():
         _notify("NZB-DAV", "Player installed to: {}".format(", ".join(succeeded)))
     if failed:
         _notify("NZB-DAV", "Failed to install to: {}".format(", ".join(failed)))
-
-
-def _notify(heading, message, duration=5000):
-    xbmc.executebuiltin("Notification({}, {}, {})".format(heading, message, duration))

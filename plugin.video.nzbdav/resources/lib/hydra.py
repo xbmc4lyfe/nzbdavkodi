@@ -2,8 +2,9 @@
 
 import xml.etree.ElementTree as ET
 from urllib.parse import urlencode
-from urllib.request import urlopen, Request
 from urllib.error import URLError
+
+from resources.lib.http_util import http_get as _http_get
 
 
 NEWZNAB_NS = "http://www.newznab.com/DTD/2010/feeds/attributes/"
@@ -17,13 +18,6 @@ def _get_settings():
     url = addon.getSetting("hydra_url").rstrip("/")
     api_key = addon.getSetting("hydra_api_key")
     return url, api_key
-
-
-def _http_get(url):
-    """Perform an HTTP GET and return the response body as text."""
-    req = Request(url)
-    with urlopen(req, timeout=15) as resp:
-        return resp.read().decode("utf-8")
 
 
 def search_hydra(search_type, title, year="", imdb="", season="", episode=""):

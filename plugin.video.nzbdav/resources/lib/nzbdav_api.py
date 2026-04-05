@@ -2,8 +2,9 @@
 
 import json
 from urllib.parse import urlencode
-from urllib.request import urlopen, Request
 from urllib.error import URLError
+
+from resources.lib.http_util import http_get as _http_get
 
 
 def _get_settings():
@@ -13,12 +14,6 @@ def _get_settings():
     url = addon.getSetting("nzbdav_url").rstrip("/")
     api_key = addon.getSetting("nzbdav_api_key")
     return url, api_key
-
-
-def _http_get(url):
-    req = Request(url)
-    with urlopen(req, timeout=15) as resp:
-        return resp.read().decode("utf-8")
 
 
 def submit_nzb(nzb_url, nzb_name=""):

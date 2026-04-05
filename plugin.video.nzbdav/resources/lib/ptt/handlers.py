@@ -394,7 +394,7 @@ def add_defaults(parser: Parser):
     parser.add_handler(
         "date",
         regex.compile(
-            r"(?:\W|^)([[(]?(?:19[6-9]|20[012])[0-9]([. \-/\\])(?:0[1-9]|1[012])\2(?:0[1-9]|[12][0-9]|3[01])[])]?)(?:\W|$)"
+            r"(?:\W|^)([\[(]?(?:19[6-9]|20[012])[0-9]([. \-/\\])(?:0[1-9]|1[012])\2(?:0[1-9]|[12][0-9]|3[01])[\])]?)(?:\W|$)"
         ),
         date("YYYY MM DD"),
         {"remove": True},
@@ -756,7 +756,7 @@ def add_defaults(parser: Parser):
     parser.add_handler(
         "quality",
         regex.compile(
-            r"\bBD[ .-]*Rip\b|\bBDR\b|\bBD-RM\b|[[(]BD[\]) .,-]", regex.IGNORECASE
+            r"\bBD[ .-]*Rip\b|\bBDR\b|\bBD-RM\b|[\[(]BD[\]) .,-]", regex.IGNORECASE
         ),
         value("BDRip"),
         {"remove": True},
@@ -1446,7 +1446,7 @@ def add_defaults(parser: Parser):
     )
     parser.add_handler("seasons", regex.compile(r"\bSn([1-9])(?:\D|$)"), array(integer))
     parser.add_handler(
-        "seasons", regex.compile(r"[[(](\d{1,2})\.\d{1,3}[)\]]"), array(integer)
+        "seasons", regex.compile(r"[\[(](\d{1,2})\.\d{1,3}[)\]]"), array(integer)
     )
     parser.add_handler(
         "seasons", regex.compile(r"-\s?(\d{1,2})\.\d{2,3}\s?-"), array(integer)
@@ -1648,7 +1648,7 @@ def add_defaults(parser: Parser):
         "episodes", regex.compile(r"(?<=S\d{2}E)\d+", regex.IGNORECASE), array(integer)
     )
     parser.add_handler(
-        "episodes", regex.compile(r"[[(]\d{1,2}\.(\d{1,3})[)\]]"), array(integer)
+        "episodes", regex.compile(r"[\[(]\d{1,2}\.(\d{1,3})[)\]]"), array(integer)
     )
     parser.add_handler(
         "episodes", regex.compile(r"\b[Ss]\d{1,2}[ .](\d{1,2})\b"), array(integer)
