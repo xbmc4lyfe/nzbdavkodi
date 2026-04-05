@@ -188,8 +188,17 @@ def parse_title_metadata(title):
         from resources.lib.ptt import parse_title
 
         parsed = parse_title(title)
-    except Exception:
-        parsed = {}
+    except Exception as e:
+        xbmc.log(
+            "NZB-DAV: PTT parse failed for '{}': {}".format(title, e), xbmc.LOGERROR
+        )
+        parsed = _fallback_parse(title)
+
+    if not parsed.get("resolution") and not parsed.get("codec"):
+        # PTT returned empty, try fallback
+        fallback = _fallback_parse(title)
+        if fallback.get("resolution") or fallback.get("codec"):
+            parsed = fallback
 
     raw_res = parsed.get("resolution", "") or ""
     resolution = _RESOLUTION_MAP.get(raw_res, raw_res)
@@ -347,3 +356,66 @@ def _sort_results(results, settings):
             results,
             key=lambda r: (_is_preferred(r), results.index(r)),
         )
+
+
+def _fallback_parse(title):
+    """Simple regex fallback when PTT fails or returns empty."""
+    import re
+
+    result = {
+        "resolution": "",
+        "codec": "",
+        "audio": [],
+        "hdr": [],
+        "languages": [],
+        "group": "",
+    }
+
+    t = title.replace("[", ".").replace("]", ".").replace("(", ".").replace(")", ".")
+
+    # Resolution
+    m = re.search(r"(?i)\b(2160p|1080p|1080i|720p|480p|4K)\b", t)
+    if m:
+        result["resolution"] = m.group(1)
+
+    # Codec
+    m = re.search(r"(?i)\b(x265|h\.?265|hevc|x264|h\.?264|avc|av1|vp9)\b", t)
+    if m:
+        result["codec"] = m.group(1).lower()
+
+    # Audio
+    audio = []
+    if re.search(r"(?i)\batmos\b", t):
+        audio.append("Atmos")
+    if re.search(r"(?i)\btruehd\b", t):
+        audio.append("TrueHD")
+    if re.search(r"(?i)\bdts[-. ]?hd[-. ]?ma\b", t):
+        audio.append("DTS-HD MA")
+    if re.search(r"(?i)\bddp?5[. ]1|eac3|dd\+|dolby.digital.plus\b", t):
+        audio.append("DD+")
+    if re.search(r"(?i)\bac3|dd[. ]?5[. ]1|dolby.digital\b", t):
+        audio.append("DD")
+    if re.search(r"(?i)\baac\b", t):
+        audio.append("AAC")
+    if re.search(r"(?i)\bdts\b", t) and not audio:
+        audio.append("DTS")
+    result["audio"] = audio
+
+    # HDR
+    hdr = []
+    if re.search(r"(?i)\b(dv|dovi|dolby[. ]?vision)\b", t):
+        hdr.append("DV")
+    if re.search(r"(?i)\bhdr10\+|hdr10plus\b", t):
+        hdr.append("HDR10+")
+    elif re.search(r"(?i)\bhdr10?\b", t):
+        hdr.append("HDR10")
+    if re.search(r"(?i)\bhlg\b", t):
+        hdr.append("HLG")
+    result["hdr"] = hdr
+
+    # Group (last segment after hyphen)
+    m = re.search(r"-([A-Za-z0-9]+)(?:\.[a-z]{2,4})?$", title)
+    if m:
+        result["group"] = m.group(1)
+
+    return result
