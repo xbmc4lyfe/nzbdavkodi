@@ -23,11 +23,11 @@ release:
     #!/usr/bin/env bash
     set -euo pipefail
     rm -f plugin.video.nzbdav.zip
-    cd plugin.video.nzbdav && zip -r ../plugin.video.nzbdav.zip . \
+    zip -r plugin.video.nzbdav.zip plugin.video.nzbdav/ \
         -x "*.pyc" \
         -x "*__pycache__*" \
         -x "*.pytest_cache*" \
-        -x ".DS_Store"
+        -x "*.DS_Store"
     echo ""
     echo "Created plugin.video.nzbdav.zip"
     echo "Install in Kodi: Settings > Add-ons > Install from zip file"
