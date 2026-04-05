@@ -9,11 +9,12 @@ import xbmcgui
 import xbmcplugin
 
 from resources.lib.http_util import notify as _notify
-from resources.lib.nzbdav_api import get_job_status, submit_nzb
+from resources.lib.nzbdav_api import get_job_history, get_job_status, submit_nzb
 from resources.lib.playback_monitor import PlaybackMonitor
 from resources.lib.webdav import (
     check_file_available_with_retry,
-    get_webdav_stream_url,
+    find_video_file,
+    get_webdav_stream_url_for_path,
     validate_stream,
 )
 
@@ -41,39 +42,61 @@ def _get_poll_settings():
     return interval, timeout
 
 
-def _poll_once(nzo_id, title):
-    """Poll nzbdav API and WebDAV in parallel.
+def _storage_to_webdav_path(storage):
+    """Convert nzbdav storage path to WebDAV content path.
 
-    Returns (job_status, file_available, error_type).
+    /mnt/nzbdav/completed-symlinks/uncategorized/Name -> /content/uncategorized/Name/
+    """
+    prefix = "/mnt/nzbdav/completed-symlinks/"
+    if storage.startswith(prefix):
+        relative = storage[len(prefix) :]
+    else:
+        # Fallback: use the last two path components (category/name)
+        parts = storage.rstrip("/").split("/")
+        relative = "/".join(parts[-2:]) if len(parts) >= 2 else parts[-1]
+    return "/content/{}/".format(relative)
+
+
+def _poll_once(nzo_id, title):
+    """Poll nzbdav queue API and history API in parallel.
+
+    Returns (job_status, history_status, error_type).
+    job_status is from the queue API (active downloads).
+    history_status is from the history API (completed downloads).
+    error_type is set if a WebDAV check encounters auth/server errors.
     """
     job_status = [None]
-    file_available = [False]
+    history_status = [None]
     error_type = [None]
 
-    def check_api():
+    def check_queue():
         job_status[0] = get_job_status(nzo_id)
 
-    def check_webdav():
-        available, error = check_file_available_with_retry(
-            title, max_retries=1, retry_delay=1
-        )
-        file_available[0] = available
-        error_type[0] = error
+    def check_history():
+        history = get_job_history(nzo_id)
+        history_status[0] = history
+        # If not in history and not in queue, check WebDAV availability
+        # using the legacy method to surface auth/server errors
+        if history is None and job_status[0] is None:
+            _, error = check_file_available_with_retry(
+                title, max_retries=1, retry_delay=1
+            )
+            error_type[0] = error
 
-    t1 = threading.Thread(target=check_api)
-    t2 = threading.Thread(target=check_webdav)
+    t1 = threading.Thread(target=check_queue)
+    t2 = threading.Thread(target=check_history)
     t1.start()
     t2.start()
     t1.join(timeout=10)
     t2.join(timeout=10)
 
     xbmc.log(
-        "NZB-DAV: Poll result - job_status={} file_available={} error_type={}".format(
-            job_status[0], file_available[0], error_type[0]
+        "NZB-DAV: Poll result - job_status={} history_status={} error_type={}".format(
+            job_status[0], history_status[0], error_type[0]
         ),
         xbmc.LOGDEBUG,
     )
-    return job_status[0], file_available[0], error_type[0]
+    return job_status[0], history_status[0], error_type[0]
 
 
 def resolve(handle, params):
@@ -135,7 +158,7 @@ def resolve(handle, params):
             xbmcplugin.setResolvedUrl(handle, False, xbmcgui.ListItem())
             return
 
-        job_status, file_available, webdav_error = _poll_once(nzo_id, title)
+        job_status, history, webdav_error = _poll_once(nzo_id, title)
 
         if job_status:
             status = job_status.get("status", "Unknown")
@@ -166,6 +189,37 @@ def resolve(handle, params):
             progress = min(int(percentage or 0), 100)
             dialog.update(progress, msg)
 
+        # Check history for completed download
+        if history and history["status"] == "Completed":
+            storage = history["storage"]
+            webdav_folder = _storage_to_webdav_path(storage)
+            video_path = find_video_file(webdav_folder)
+            if video_path:
+                dialog.close()
+                stream_url = get_webdav_stream_url_for_path(video_path)
+                xbmc.log(
+                    "NZB-DAV: File available, streaming '{}' via WebDAV".format(
+                        video_path
+                    ),
+                    xbmc.LOGINFO,
+                )
+
+                # Validate stream supports range requests before playback
+                if not validate_stream(title):
+                    xbmc.log(
+                        "NZB-DAV: Stream validation failed for '{}', "
+                        "attempting playback anyway".format(title),
+                        xbmc.LOGWARNING,
+                    )
+
+                li = xbmcgui.ListItem(path=stream_url)
+                xbmcplugin.setResolvedUrl(handle, True, li)
+
+                # Start playback monitoring for auto-retry on stream drops
+                pb_monitor = PlaybackMonitor(stream_url, title=title)
+                pb_monitor.start_monitoring()
+                return
+
         # Handle WebDAV error types
         if webdav_error == "auth_failed":
             dialog.close()
@@ -179,30 +233,6 @@ def resolve(handle, params):
                 "NZB-DAV: WebDAV server error, will retry on next poll",
                 xbmc.LOGWARNING,
             )
-
-        if file_available:
-            dialog.close()
-            stream_url = get_webdav_stream_url(title)
-            xbmc.log(
-                "NZB-DAV: File available, streaming '{}' via WebDAV".format(title),
-                xbmc.LOGINFO,
-            )
-
-            # Validate stream supports range requests before playback
-            if not validate_stream(title):
-                xbmc.log(
-                    "NZB-DAV: Stream validation failed for '{}', "
-                    "attempting playback anyway".format(title),
-                    xbmc.LOGWARNING,
-                )
-
-            li = xbmcgui.ListItem(path=stream_url)
-            xbmcplugin.setResolvedUrl(handle, True, li)
-
-            # Start playback monitoring for auto-retry on stream drops
-            pb_monitor = PlaybackMonitor(stream_url, title=title)
-            pb_monitor.start_monitoring()
-            return
 
         if monitor.waitForAbort(poll_interval):
             # Kodi is shutting down
@@ -245,7 +275,7 @@ def resolve_and_play(nzb_url, title):
             dialog.close()
             return
 
-        job_status, file_available, webdav_error = _poll_once(nzo_id, title)
+        job_status, history, webdav_error = _poll_once(nzo_id, title)
 
         if job_status:
             status = job_status.get("status", "Unknown")
@@ -267,17 +297,22 @@ def resolve_and_play(nzb_url, title):
             _notify("NZB-DAV", _ERROR_MESSAGES["auth_failed"])
             return
 
-        if file_available:
-            dialog.close()
-            stream_url = get_webdav_stream_url(title)
-            xbmc.log("NZB-DAV: Playing '{}' via WebDAV".format(title), xbmc.LOGINFO)
-            li = xbmcgui.ListItem(path=stream_url)
-            xbmc.Player().play(stream_url, li)
+        # Check history for completed download
+        if history and history["status"] == "Completed":
+            storage = history["storage"]
+            webdav_folder = _storage_to_webdav_path(storage)
+            video_path = find_video_file(webdav_folder)
+            if video_path:
+                dialog.close()
+                stream_url = get_webdav_stream_url_for_path(video_path)
+                xbmc.log("NZB-DAV: Playing '{}'".format(stream_url), xbmc.LOGINFO)
+                li = xbmcgui.ListItem(path=stream_url)
+                xbmc.Player().play(stream_url, li)
 
-            # Start playback monitoring
-            pb_monitor = PlaybackMonitor(stream_url, title=title)
-            pb_monitor.start_monitoring()
-            return
+                # Start playback monitoring
+                pb_monitor = PlaybackMonitor(stream_url, title=title)
+                pb_monitor.start_monitoring()
+                return
 
         if monitor.waitForAbort(poll_interval):
             dialog.close()

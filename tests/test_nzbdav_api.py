@@ -1,7 +1,7 @@
 import json
 from unittest.mock import patch
 
-from resources.lib.nzbdav_api import get_job_status, submit_nzb
+from resources.lib.nzbdav_api import get_job_history, get_job_status, submit_nzb
 
 
 @patch("resources.lib.nzbdav_api._get_settings")
@@ -167,3 +167,96 @@ def test_get_job_status_returns_correct_fields(mock_http, mock_settings):
     assert status["status"] == "Downloading"
     assert status["percentage"] == "62"
     assert status["filename"] == "Dune.Part.Two.2024.2160p"
+
+
+# --- get_job_history tests ---
+
+
+@patch("resources.lib.nzbdav_api._get_settings")
+@patch("resources.lib.nzbdav_api._http_get")
+def test_get_job_history_completed(mock_http, mock_settings):
+    """get_job_history returns dict with status/storage/name for a completed job."""
+    mock_settings.return_value = ("http://nzbdav:3000", "testkey")
+    mock_http.return_value = json.dumps(
+        {
+            "history": {
+                "slots": [
+                    {
+                        "nzo_id": "SABnzbd_nzo_hist1",
+                        "status": "Completed",
+                        "storage": (
+                            "/mnt/nzbdav/completed-symlinks/"
+                            "uncategorized/Send Help 2026"
+                        ),
+                        "name": "Send Help 2026 1080p",
+                    }
+                ]
+            }
+        }
+    )
+    result = get_job_history("SABnzbd_nzo_hist1")
+    assert result is not None
+    assert result["status"] == "Completed"
+    assert (
+        result["storage"]
+        == "/mnt/nzbdav/completed-symlinks/uncategorized/Send Help 2026"
+    )
+    assert result["name"] == "Send Help 2026 1080p"
+    call_url = mock_http.call_args[0][0]
+    assert "mode=history" in call_url
+    assert "apikey=testkey" in call_url
+
+
+@patch("resources.lib.nzbdav_api._get_settings")
+@patch("resources.lib.nzbdav_api._http_get")
+def test_get_job_history_not_found(mock_http, mock_settings):
+    """get_job_history returns None when job is not in history."""
+    mock_settings.return_value = ("http://nzbdav:3000", "testkey")
+    mock_http.return_value = json.dumps({"history": {"slots": []}})
+    result = get_job_history("SABnzbd_nzo_missing")
+    assert result is None
+
+
+@patch("resources.lib.nzbdav_api._get_settings")
+@patch("resources.lib.nzbdav_api._http_get")
+def test_get_job_history_connection_error(mock_http, mock_settings):
+    """get_job_history returns None on connection error."""
+    mock_settings.return_value = ("http://nzbdav:3000", "testkey")
+    mock_http.side_effect = Exception("Connection refused")
+    result = get_job_history("SABnzbd_nzo_abc123")
+    assert result is None
+
+
+@patch("resources.lib.nzbdav_api._get_settings")
+@patch("resources.lib.nzbdav_api._http_get")
+def test_get_job_history_finds_correct_slot(mock_http, mock_settings):
+    """get_job_history finds the correct slot among multiple history entries."""
+    mock_settings.return_value = ("http://nzbdav:3000", "testkey")
+    mock_http.return_value = json.dumps(
+        {
+            "history": {
+                "slots": [
+                    {
+                        "nzo_id": "SABnzbd_nzo_other",
+                        "status": "Completed",
+                        "storage": (
+                            "/mnt/nzbdav/completed-symlinks/uncategorized/Other Movie"
+                        ),
+                        "name": "Other Movie",
+                    },
+                    {
+                        "nzo_id": "SABnzbd_nzo_target",
+                        "status": "Completed",
+                        "storage": (
+                            "/mnt/nzbdav/completed-symlinks/uncategorized/Target Movie"
+                        ),
+                        "name": "Target Movie",
+                    },
+                ]
+            }
+        }
+    )
+    result = get_job_history("SABnzbd_nzo_target")
+    assert result is not None
+    assert result["name"] == "Target Movie"
+    assert result["storage"].endswith("Target Movie")
