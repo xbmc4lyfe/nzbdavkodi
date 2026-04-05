@@ -28,7 +28,7 @@ PLAYER_JSON = {
     "name": "NZB-DAV",
     "plugin": "plugin.video.nzbdav",
     "priority": 100,
-    "is_resolvable": "false",
+    "is_resolvable": "select",
     "assert": {
         "play_movie": ["title", "year"],
         "play_episode": ["showname", "season", "episode"],

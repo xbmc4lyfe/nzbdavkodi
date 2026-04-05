@@ -166,12 +166,15 @@ def _display_results(handle, results):
         label = _format_label(item)
         li = xbmcgui.ListItem(label=label)
         li.setInfo("video", {"title": item["title"]})
+        li.setProperty("IsPlayable", "true")
 
         url = "plugin://plugin.video.nzbdav/resolve?nzburl={}&title={}".format(
             quote(item["link"], safe=""),
             quote(item["title"], safe=""),
         )
         xbmcplugin.addDirectoryItem(handle=handle, url=url, listitem=li, isFolder=False)
+
+    xbmcplugin.setContent(handle, "videos")
 
     xbmcplugin.endOfDirectory(handle)
 
