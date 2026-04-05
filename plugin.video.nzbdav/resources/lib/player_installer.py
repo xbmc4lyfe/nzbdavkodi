@@ -42,7 +42,14 @@ def get_install_targets():
     addon = xbmcaddon.Addon()
     targets = []
     for name, config in PLAYER_TARGETS.items():
-        if addon.getSetting(config["setting_id"]).lower() == "true":
+        val = addon.getSetting(config["setting_id"])
+        xbmc.log(
+            "NZB-DAV: Setting '{}' = '{}' (type={})".format(
+                config["setting_id"], val, type(val).__name__
+            ),
+            xbmc.LOGDEBUG,
+        )
+        if val.lower() == "true":
             targets.append((name, config["path"]))
     xbmc.log(
         "NZB-DAV: Install targets selected: {}".format([t[0] for t in targets]),
