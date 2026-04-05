@@ -43,6 +43,8 @@ Open the addon settings (**Add-ons > My add-ons > Video add-ons > NZB-DAV > Conf
 | WebDAV URL | Leave empty to use nzbdav URL, or set a different URL if WebDAV is on a separate port |
 | WebDAV Username | Username for WebDAV authentication |
 | WebDAV Password | Password for WebDAV authentication |
+| Cache Duration | Search result cache TTL in seconds (default: 300, 0 to disable) |
+| Auto-select best match | Skip result list and automatically pick the top result (default: off) |
 
 ### Player Installation
 
@@ -80,13 +82,24 @@ All filters default to **everything enabled** -- deselect what you don't want.
 - **Poll interval**: Seconds between status checks (default: 5)
 - **Download timeout**: Max wait time in seconds (default: 3600)
 
+### Search Cache
+
+- **Cache duration**: How long to cache search results in seconds (default: 300, set to 0 to disable)
+- Use **Clear Cache** from the addon main menu to manually clear all cached results
+
+### Auto-Select
+
+- **Auto-select best match**: When enabled, the addon automatically picks the top result (after filtering and sorting) and skips the result list entirely. Useful for hands-free playback.
+
 ## Usage
 
 1. Open **TMDBHelper** and browse to a movie or TV episode
 2. Select **Play with NZB-DAV**
-3. Pick an NZB from the filtered results list
+3. Pick an NZB from the filtered results list -- results display rich quality labels showing resolution, HDR format, audio codec, video codec, file size, and release group at a glance
 4. Wait for the download to complete (progress dialog shows status)
 5. Playback starts automatically from nzbdav's WebDAV server
+
+With **Auto-select best match** enabled, step 3 is skipped -- the addon automatically picks the top result.
 
 ## Development
 
@@ -98,7 +111,7 @@ All filters default to **everything enabled** -- deselect what you don't want.
 ### Commands
 
 ```bash
-just test          # Run all 101 tests
+just test          # Run all 111 tests
 just test-verbose  # Run tests with full output
 just lint          # Check ruff + black formatting
 just lint-fix      # Auto-fix lint issues
@@ -123,12 +136,13 @@ plugin.video.nzbdav/
       webdav.py          # WebDAV availability checker
       filter.py          # Result filtering with PTT
       resolver.py        # Download + polling orchestrator
+      cache.py           # JSON-based search result cache
       player_installer.py # Player JSON installer
       http_util.py       # Shared HTTP utilities
       ptt/               # Vendored PTT library
 tests/
   conftest.py            # Kodi module mocks
-  test_*.py              # 101 tests
+  test_*.py              # 111 tests
 ```
 
 ## Compatibility
