@@ -126,5 +126,12 @@
                 <setting id="auto_select_best" type="boolean" label="Auto-select best match (skip result list)" default="false"/>
             </group>
         </category>
+        <category id="resilience" label="Stream Resilience">
+            <group id="resilience_settings" label="Stream Resilience">
+                <setting id="stream_auto_retry" type="boolean" label="Auto-retry on stream failure" default="true"/>
+                <setting id="stream_max_retries" type="integer" label="Max retry attempts" default="3"/>
+                <setting id="stream_retry_delay" type="integer" label="Retry delay (seconds)" default="5"/>
+            </group>
+        </category>
     </section>
 </settings>
