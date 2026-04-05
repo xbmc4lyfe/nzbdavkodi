@@ -13,11 +13,6 @@
 		<setting id="webdav_password" label="Password" type="text" default="" option="hidden" />
 	</category>
 	<category label="Player Installation">
-		<setting label="Install player file to" type="lsep" />
-		<setting id="install_tmdbhelper" label="TMDBHelper" type="bool" default="false" />
-		<setting id="install_fen" label="Fen" type="bool" default="false" />
-		<setting id="install_seren" label="Seren" type="bool" default="false" />
-		<setting label="" type="lsep" />
 		<setting label="Install Player File" type="action" action="RunPlugin(plugin://plugin.video.nzbdav/install_player)" />
 	</category>
 	<category label="Quality Filters">
