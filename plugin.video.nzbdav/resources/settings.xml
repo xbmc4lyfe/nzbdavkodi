@@ -1,137 +1,90 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes"?>
-<settings version="2">
-    <section id="connection">
-        <category id="nzbhydra" label="NZBHydra2">
-            <group id="hydra_settings" label="Connection">
-                <setting id="hydra_url" type="string" label="NZBHydra2 URL" default="http://localhost:5076"/>
-                <setting id="hydra_api_key" type="string" label="API Key" default="" option="hidden"/>
-            </group>
-        </category>
-        <category id="nzbdav" label="nzbdav">
-            <group id="nzbdav_settings" label="Connection">
-                <setting id="nzbdav_url" type="string" label="nzbdav URL" default="http://localhost:3000"/>
-                <setting id="nzbdav_api_key" type="string" label="API Key" default="" option="hidden"/>
-            </group>
-            <group id="webdav_settings" label="WebDAV">
-                <setting id="webdav_url" type="string" label="WebDAV URL (leave empty to use nzbdav URL)" default=""/>
-                <setting id="webdav_username" type="string" label="Username" default=""/>
-                <setting id="webdav_password" type="string" label="Password" default="" option="hidden"/>
-            </group>
-        </category>
-    </section>
-    <section id="player">
-        <category id="player_install" label="Player Installation">
-            <group id="install_targets" label="Install player file to">
-                <setting id="install_tmdbhelper" type="boolean" label="TMDBHelper" default="false"/>
-                <setting id="install_fen" type="boolean" label="Fen" default="false"/>
-                <setting id="install_seren" type="boolean" label="Seren" default="false"/>
-            </group>
-            <group id="install_action" label="Actions">
-                <setting id="install_player_action" type="action" label="Install Player File" action="RunPlugin(plugin://plugin.video.nzbdav/install_player)"/>
-            </group>
-        </category>
-    </section>
-    <section id="filters">
-        <category id="quality_filters" label="Quality Filters">
-            <group id="resolution" label="Resolution">
-                <setting id="filter_2160p" type="boolean" label="2160p / 4K" default="true"/>
-                <setting id="filter_1080p" type="boolean" label="1080p" default="true"/>
-                <setting id="filter_720p" type="boolean" label="720p" default="true"/>
-                <setting id="filter_480p" type="boolean" label="480p" default="true"/>
-            </group>
-            <group id="hdr" label="HDR">
-                <setting id="filter_hdr10" type="boolean" label="HDR10" default="true"/>
-                <setting id="filter_hdr10plus" type="boolean" label="HDR10+" default="true"/>
-                <setting id="filter_dolby_vision" type="boolean" label="Dolby Vision" default="true"/>
-                <setting id="filter_hlg" type="boolean" label="HLG" default="true"/>
-                <setting id="filter_sdr" type="boolean" label="SDR" default="true"/>
-            </group>
-            <group id="audio" label="Audio">
-                <setting id="filter_atmos" type="boolean" label="Atmos" default="true"/>
-                <setting id="filter_truehd" type="boolean" label="TrueHD" default="true"/>
-                <setting id="filter_dtshd_ma" type="boolean" label="DTS-HD MA" default="true"/>
-                <setting id="filter_dtsx" type="boolean" label="DTS:X" default="true"/>
-                <setting id="filter_ddplus" type="boolean" label="DD+ (EAC3)" default="true"/>
-                <setting id="filter_dd" type="boolean" label="DD (AC3)" default="true"/>
-                <setting id="filter_aac" type="boolean" label="AAC" default="true"/>
-            </group>
-            <group id="codec" label="Video Codec">
-                <setting id="filter_hevc" type="boolean" label="x265 / HEVC" default="true"/>
-                <setting id="filter_avc" type="boolean" label="x264 / AVC" default="true"/>
-                <setting id="filter_av1" type="boolean" label="AV1" default="true"/>
-                <setting id="filter_vp9" type="boolean" label="VP9" default="true"/>
-                <setting id="filter_mpeg2" type="boolean" label="MPEG-2" default="true"/>
-            </group>
-            <group id="language" label="Language">
-                <setting id="filter_english" type="boolean" label="English" default="true"/>
-                <setting id="filter_spanish" type="boolean" label="Spanish" default="true"/>
-                <setting id="filter_french" type="boolean" label="French" default="true"/>
-                <setting id="filter_german" type="boolean" label="German" default="true"/>
-                <setting id="filter_italian" type="boolean" label="Italian" default="true"/>
-                <setting id="filter_portuguese" type="boolean" label="Portuguese" default="true"/>
-                <setting id="filter_dutch" type="boolean" label="Dutch" default="true"/>
-                <setting id="filter_russian" type="boolean" label="Russian" default="true"/>
-                <setting id="filter_japanese" type="boolean" label="Japanese" default="true"/>
-                <setting id="filter_korean" type="boolean" label="Korean" default="true"/>
-                <setting id="filter_chinese" type="boolean" label="Chinese" default="true"/>
-                <setting id="filter_arabic" type="boolean" label="Arabic" default="true"/>
-                <setting id="filter_hindi" type="boolean" label="Hindi" default="true"/>
-            </group>
-        </category>
-        <category id="keyword_filters" label="Keyword Filters">
-            <group id="release_groups" label="Release Groups">
-                <setting id="filter_release_group" type="string" label="Preferred groups (comma-separated)" default=""/>
-                <setting id="filter_exclude_release_group" type="string" label="Excluded groups (comma-separated)" default=""/>
-            </group>
-            <group id="size" label="File Size">
-                <setting id="filter_min_size" type="integer" label="Min size (MB, 0=no limit)" default="0"/>
-                <setting id="filter_max_size" type="integer" label="Max size (MB, 0=no limit)" default="0"/>
-            </group>
-            <group id="keywords" label="Keywords">
-                <setting id="filter_exclude_keywords" type="string" label="Exclude keywords (comma-separated)" default=""/>
-                <setting id="filter_require_keywords" type="string" label="Required keywords (comma-separated)" default=""/>
-            </group>
-        </category>
-        <category id="sort_settings" label="Sorting">
-            <group id="sort" label="Sort Order">
-                <setting id="sort_order" type="integer" label="Sort by" default="0">
-                    <constraints>
-                        <options>
-                            <option label="Relevance">0</option>
-                            <option label="Size (largest first)">1</option>
-                            <option label="Size (smallest first)">2</option>
-                            <option label="Age (newest first)">3</option>
-                            <option label="Age (oldest first)">4</option>
-                        </options>
-                    </constraints>
-                </setting>
-                <setting id="max_results" type="integer" label="Max results" default="25"/>
-            </group>
-        </category>
-    </section>
-    <section id="advanced">
-        <category id="polling" label="Polling">
-            <group id="poll_settings" label="Download Polling">
-                <setting id="poll_interval" type="integer" label="Poll interval (seconds)" default="5"/>
-                <setting id="download_timeout" type="integer" label="Download timeout (seconds)" default="3600"/>
-            </group>
-        </category>
-        <category id="cache" label="Search Cache">
-            <group id="cache_settings" label="Search Cache">
-                <setting id="cache_ttl" type="integer" label="Cache duration (seconds, 0=disabled)" default="300"/>
-            </group>
-        </category>
-        <category id="auto_select" label="Auto-Select">
-            <group id="auto_select_settings" label="Auto-Select">
-                <setting id="auto_select_best" type="boolean" label="Auto-select best match (skip result list)" default="false"/>
-            </group>
-        </category>
-        <category id="resilience" label="Stream Resilience">
-            <group id="resilience_settings" label="Stream Resilience">
-                <setting id="stream_auto_retry" type="boolean" label="Auto-retry on stream failure" default="true"/>
-                <setting id="stream_max_retries" type="integer" label="Max retry attempts" default="3"/>
-                <setting id="stream_retry_delay" type="integer" label="Retry delay (seconds)" default="5"/>
-            </group>
-        </category>
-    </section>
+<settings>
+    <category label="NZBHydra2">
+        <setting id="hydra_url" type="text" label="NZBHydra2 URL" default="http://localhost:5076"/>
+        <setting id="hydra_api_key" type="text" label="API Key" default="" option="hidden"/>
+    </category>
+    <category label="nzbdav">
+        <setting id="nzbdav_url" type="text" label="nzbdav URL" default="http://localhost:3000"/>
+        <setting id="nzbdav_api_key" type="text" label="API Key" default="" option="hidden"/>
+        <setting type="lsep" label="WebDAV"/>
+        <setting id="webdav_url" type="text" label="WebDAV URL (leave empty to use nzbdav URL)" default=""/>
+        <setting id="webdav_username" type="text" label="Username" default=""/>
+        <setting id="webdav_password" type="text" label="Password" default="" option="hidden"/>
+    </category>
+    <category label="Player Installation">
+        <setting id="install_tmdbhelper" type="bool" label="TMDBHelper" default="false"/>
+        <setting id="install_fen" type="bool" label="Fen" default="false"/>
+        <setting id="install_seren" type="bool" label="Seren" default="false"/>
+        <setting type="lsep" label=""/>
+        <setting id="install_player_action" type="action" label="Install Player File" action="RunPlugin(plugin://plugin.video.nzbdav/install_player)"/>
+    </category>
+    <category label="Quality Filters">
+        <setting type="lsep" label="Resolution"/>
+        <setting id="filter_2160p" type="bool" label="2160p / 4K" default="true"/>
+        <setting id="filter_1080p" type="bool" label="1080p" default="true"/>
+        <setting id="filter_720p" type="bool" label="720p" default="true"/>
+        <setting id="filter_480p" type="bool" label="480p" default="true"/>
+        <setting type="lsep" label="HDR"/>
+        <setting id="filter_hdr10" type="bool" label="HDR10" default="true"/>
+        <setting id="filter_hdr10plus" type="bool" label="HDR10+" default="true"/>
+        <setting id="filter_dolby_vision" type="bool" label="Dolby Vision" default="true"/>
+        <setting id="filter_hlg" type="bool" label="HLG" default="true"/>
+        <setting id="filter_sdr" type="bool" label="SDR" default="true"/>
+        <setting type="lsep" label="Audio"/>
+        <setting id="filter_atmos" type="bool" label="Atmos" default="true"/>
+        <setting id="filter_truehd" type="bool" label="TrueHD" default="true"/>
+        <setting id="filter_dtshd_ma" type="bool" label="DTS-HD MA" default="true"/>
+        <setting id="filter_dtsx" type="bool" label="DTS:X" default="true"/>
+        <setting id="filter_ddplus" type="bool" label="DD+ (EAC3)" default="true"/>
+        <setting id="filter_dd" type="bool" label="DD (AC3)" default="true"/>
+        <setting id="filter_aac" type="bool" label="AAC" default="true"/>
+        <setting type="lsep" label="Video Codec"/>
+        <setting id="filter_hevc" type="bool" label="x265 / HEVC" default="true"/>
+        <setting id="filter_avc" type="bool" label="x264 / AVC" default="true"/>
+        <setting id="filter_av1" type="bool" label="AV1" default="true"/>
+        <setting id="filter_vp9" type="bool" label="VP9" default="true"/>
+        <setting id="filter_mpeg2" type="bool" label="MPEG-2" default="true"/>
+        <setting type="lsep" label="Language"/>
+        <setting id="filter_english" type="bool" label="English" default="true"/>
+        <setting id="filter_spanish" type="bool" label="Spanish" default="true"/>
+        <setting id="filter_french" type="bool" label="French" default="true"/>
+        <setting id="filter_german" type="bool" label="German" default="true"/>
+        <setting id="filter_italian" type="bool" label="Italian" default="true"/>
+        <setting id="filter_portuguese" type="bool" label="Portuguese" default="true"/>
+        <setting id="filter_dutch" type="bool" label="Dutch" default="true"/>
+        <setting id="filter_russian" type="bool" label="Russian" default="true"/>
+        <setting id="filter_japanese" type="bool" label="Japanese" default="true"/>
+        <setting id="filter_korean" type="bool" label="Korean" default="true"/>
+        <setting id="filter_chinese" type="bool" label="Chinese" default="true"/>
+        <setting id="filter_arabic" type="bool" label="Arabic" default="true"/>
+        <setting id="filter_hindi" type="bool" label="Hindi" default="true"/>
+    </category>
+    <category label="Keyword Filters">
+        <setting id="filter_release_group" type="text" label="Preferred groups (comma-separated)" default=""/>
+        <setting id="filter_exclude_release_group" type="text" label="Excluded groups (comma-separated)" default=""/>
+        <setting type="lsep" label="File Size"/>
+        <setting id="filter_min_size" type="number" label="Min size (MB, 0=no limit)" default="0"/>
+        <setting id="filter_max_size" type="number" label="Max size (MB, 0=no limit)" default="0"/>
+        <setting type="lsep" label="Keywords"/>
+        <setting id="filter_exclude_keywords" type="text" label="Exclude keywords (comma-separated)" default=""/>
+        <setting id="filter_require_keywords" type="text" label="Required keywords (comma-separated)" default=""/>
+    </category>
+    <category label="Sorting &amp; Display">
+        <setting id="sort_order" type="enum" label="Sort by" default="0" values="Relevance|Size (largest first)|Size (smallest first)|Age (newest first)|Age (oldest first)"/>
+        <setting id="max_results" type="number" label="Max results" default="25"/>
+        <setting type="lsep" label="Auto-Select"/>
+        <setting id="auto_select_best" type="bool" label="Auto-select best match (skip result list)" default="false"/>
+    </category>
+    <category label="Advanced">
+        <setting type="lsep" label="Polling"/>
+        <setting id="poll_interval" type="number" label="Poll interval (seconds)" default="5"/>
+        <setting id="download_timeout" type="number" label="Download timeout (seconds)" default="3600"/>
+        <setting type="lsep" label="Search Cache"/>
+        <setting id="cache_ttl" type="number" label="Cache duration (seconds, 0=disabled)" default="300"/>
+        <setting type="lsep" label="Stream Resilience"/>
+        <setting id="stream_auto_retry" type="bool" label="Auto-retry on stream failure" default="true"/>
+        <setting id="stream_max_retries" type="number" label="Max retry attempts" default="3"/>
+        <setting id="stream_retry_delay" type="number" label="Retry delay (seconds)" default="5"/>
+    </category>
 </settings>
