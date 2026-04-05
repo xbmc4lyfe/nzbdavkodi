@@ -28,13 +28,9 @@ PLAYER_JSON = {
     "name": "NZB-DAV",
     "plugin": "plugin.video.nzbdav",
     "priority": 100,
-    "is_resolvable": "select",
-    "assert": {
-        "play_movie": ["title", "year"],
-        "play_episode": ["showname", "season", "episode"],
-    },
-    "play_movie": "plugin://plugin.video.nzbdav/search?type=movie&title={title}&year={year}&imdb={imdb}",
-    "play_episode": "plugin://plugin.video.nzbdav/search?type=episode&title={showname}&year={showyear}&season={season}&episode={episode}&imdb={imdb}",
+    "is_resolvable": "true",
+    "play_movie": "executebuiltin://RunPlugin(plugin://plugin.video.nzbdav/play?type=movie&title={title}&year={year}&imdb={imdb})",
+    "play_episode": "executebuiltin://RunPlugin(plugin://plugin.video.nzbdav/play?type=episode&title={showname}&year={showyear}&season={season}&episode={episode}&imdb={imdb})",
 }
 
 
