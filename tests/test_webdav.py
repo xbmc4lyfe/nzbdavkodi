@@ -1,11 +1,13 @@
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from urllib.parse import unquote
 
 from resources.lib.webdav import (
     build_webdav_url,
     check_file_available,
     check_file_available_with_retry,
+    find_video_file,
     get_webdav_stream_url,
+    get_webdav_stream_url_for_path,
 )
 
 _SETTINGS_WITH_AUTH = {
@@ -164,3 +166,103 @@ def test_check_file_available_with_retry_retries_on_connection_error(
     assert available is True
     assert error is None
     assert mock_head.call_count == 3
+
+
+# --- find_video_file tests ---
+
+_PROPFIND_RESPONSE = """<?xml version="1.0" encoding="utf-8"?>
+<D:multistatus xmlns:D="DAV:">
+  <D:response>
+    <D:href>/content/uncategorized/Send%20Help%202026/</D:href>
+    <D:propstat>
+      <D:prop>
+        <D:resourcetype><D:collection/></D:resourcetype>
+      </D:prop>
+      <D:status>HTTP/1.1 200 OK</D:status>
+    </D:propstat>
+  </D:response>
+  <D:response>
+    <D:href>/content/uncategorized/Send%20Help%202026/Send.Help.2026.1080p.NLsubs.mkv</D:href>
+    <D:propstat>
+      <D:prop>
+        <D:getcontentlength>4294967296</D:getcontentlength>
+        <D:resourcetype/>
+      </D:prop>
+      <D:status>HTTP/1.1 200 OK</D:status>
+    </D:propstat>
+  </D:response>
+</D:multistatus>"""
+
+
+@patch("resources.lib.webdav._get_settings")
+@patch("resources.lib.webdav.urlopen")
+def test_find_video_file_returns_path(mock_urlopen, mock_settings):
+    """find_video_file returns the path of the video file found via PROPFIND."""
+    mock_settings.return_value = _SETTINGS_WITH_AUTH
+    mock_resp = MagicMock()
+    mock_resp.__enter__ = lambda s: s
+    mock_resp.__exit__ = MagicMock(return_value=False)
+    mock_resp.read.return_value = _PROPFIND_RESPONSE.encode("utf-8")
+    mock_urlopen.return_value = mock_resp
+
+    path = find_video_file("/content/uncategorized/Send Help 2026/")
+    assert path is not None
+    assert path.endswith(".mkv")
+    assert "Send.Help.2026" in path
+
+
+@patch("resources.lib.webdav._get_settings")
+@patch("resources.lib.webdav.urlopen")
+def test_find_video_file_returns_none_when_no_video(mock_urlopen, mock_settings):
+    """find_video_file returns None when no video file is found in the folder."""
+    mock_settings.return_value = _SETTINGS_WITH_AUTH
+    empty_response = """<?xml version="1.0" encoding="utf-8"?>
+<D:multistatus xmlns:D="DAV:">
+  <D:response>
+    <D:href>/content/uncategorized/Empty/</D:href>
+    <D:propstat>
+      <D:prop><D:resourcetype><D:collection/></D:resourcetype></D:prop>
+      <D:status>HTTP/1.1 200 OK</D:status>
+    </D:propstat>
+  </D:response>
+</D:multistatus>"""
+    mock_resp = MagicMock()
+    mock_resp.__enter__ = lambda s: s
+    mock_resp.__exit__ = MagicMock(return_value=False)
+    mock_resp.read.return_value = empty_response.encode("utf-8")
+    mock_urlopen.return_value = mock_resp
+
+    path = find_video_file("/content/uncategorized/Empty/")
+    assert path is None
+
+
+@patch("resources.lib.webdav._get_settings")
+@patch("resources.lib.webdav.urlopen")
+def test_find_video_file_returns_none_on_error(mock_urlopen, mock_settings):
+    """find_video_file returns None on network/parse errors."""
+    mock_settings.return_value = _SETTINGS_WITH_AUTH
+    mock_urlopen.side_effect = Exception("Connection refused")
+
+    path = find_video_file("/content/uncategorized/Some Folder/")
+    assert path is None
+
+
+# --- get_webdav_stream_url_for_path tests ---
+
+
+@patch("resources.lib.webdav._get_settings")
+def test_get_webdav_stream_url_for_path_with_auth(mock_settings):
+    """get_webdav_stream_url_for_path embeds credentials in the URL."""
+    mock_settings.return_value = _SETTINGS_WITH_AUTH
+    file_path = "/content/uncategorized/Movie/Movie.mkv"
+    url = get_webdav_stream_url_for_path(file_path)
+    assert url == "http://user:pass@webdav:8080/content/uncategorized/Movie/Movie.mkv"
+
+
+@patch("resources.lib.webdav._get_settings")
+def test_get_webdav_stream_url_for_path_without_auth(mock_settings):
+    """get_webdav_stream_url_for_path returns plain URL when no credentials."""
+    mock_settings.return_value = _SETTINGS_NO_AUTH
+    file_path = "/content/uncategorized/Movie/Movie.mkv"
+    url = get_webdav_stream_url_for_path(file_path)
+    assert url == "http://webdav:8080/content/uncategorized/Movie/Movie.mkv"

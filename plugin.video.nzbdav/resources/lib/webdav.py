@@ -168,6 +168,115 @@ def check_file_available_with_retry(filename, max_retries=3, retry_delay=2):
     return False, "connection_error"
 
 
+def find_video_file(folder_path):
+    """Browse a WebDAV folder and find the video file.
+
+    Uses PROPFIND to list files, returns the path to the largest video file.
+    Returns None if no video file found.
+    """
+    import xml.etree.ElementTree as ET
+
+    settings = _get_settings()
+    base = settings["webdav_url"] or settings["nzbdav_url"]
+    username = settings["username"]
+    password = settings["password"]
+
+    url = "{}/{}".format(base.rstrip("/"), folder_path.lstrip("/"))
+    if not url.endswith("/"):
+        url += "/"
+
+    req = Request(url, method="PROPFIND")
+    req.add_header("Depth", "1")
+    if username:
+        credentials = "{}:{}".format(username, password)
+        encoded = base64.b64encode(credentials.encode("utf-8")).decode("utf-8")
+        req.add_header("Authorization", "Basic {}".format(encoded))
+
+    VIDEO_EXTENSIONS = (".mkv", ".mp4", ".avi", ".m4v", ".ts", ".wmv", ".mov")
+
+    try:
+        with urlopen(req, timeout=10) as resp:
+            body = resp.read().decode("utf-8", errors="replace")
+
+        # Parse the PROPFIND XML response
+        root = ET.fromstring(body)
+        ns = {"D": "DAV:"}
+
+        best_file = None
+        best_size = 0
+
+        for response in root.findall(".//D:response", ns):
+            href = response.find("D:href", ns)
+            if href is None:
+                continue
+            href_text = href.text or ""
+
+            # Check if it's a video file
+            lower_href = href_text.lower()
+            if not any(lower_href.endswith(ext) for ext in VIDEO_EXTENSIONS):
+                continue
+
+            # Get file size
+            size_el = response.find(".//D:getcontentlength", ns)
+            size = int(size_el.text) if size_el is not None and size_el.text else 0
+
+            if size >= best_size:
+                best_size = size
+                best_file = href_text
+
+        if best_file:
+            # The href from PROPFIND uses localhost:8080, convert to our base URL
+            # Extract just the path portion
+            from urllib.parse import urlparse
+
+            parsed = urlparse(best_file)
+            file_path = parsed.path
+            xbmc.log(
+                "NZB-DAV: Found video file: {} ({} bytes)".format(file_path, best_size),
+                xbmc.LOGINFO,
+            )
+            return file_path
+
+        return None
+    except Exception as e:
+        xbmc.log(
+            "NZB-DAV: Error browsing WebDAV folder '{}': {}".format(folder_path, e),
+            xbmc.LOGERROR,
+        )
+        return None
+
+
+def get_webdav_stream_url_for_path(file_path):
+    """Build a stream URL with embedded credentials for a full WebDAV path."""
+    settings = _get_settings()
+    base = settings["webdav_url"] or settings["nzbdav_url"]
+    username = settings["username"]
+    password = settings["password"]
+
+    # file_path is already URL-encoded from PROPFIND
+    if username:
+        proto, rest = base.split("://", 1)
+        return "{}://{}:{}@{}{}".format(
+            proto,
+            quote(username, safe=""),
+            quote(password, safe=""),
+            rest,
+            file_path,
+        )
+    return "{}{}".format(base, file_path)
+
+
+def check_file_in_folder(folder_path):
+    """Check if a video file exists in a WebDAV folder.
+
+    Returns (file_path, None) if found, (None, error_type) if not.
+    """
+    video_path = find_video_file(folder_path)
+    if video_path:
+        return video_path, None
+    return None, "not_found"
+
+
 def validate_stream(filename):
     """Verify the WebDAV file supports range requests (seekable streaming).
 
