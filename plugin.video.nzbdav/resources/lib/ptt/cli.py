@@ -1,7 +1,7 @@
 import argparse
-import sys
-import os
 import json
+import os
+import sys
 
 
 def main():
@@ -80,14 +80,14 @@ def combine_keywords(directory: str) -> None:
     keywords = set()
     files_used = 0
     for filename in os.listdir(directory):
-        if filename.endswith(".txt") and "combined-keywords" not in filename:
+        if filename.endswith(".dat") and "combined-keywords" not in filename:
             filepath = os.path.join(directory, filename)
             with open(filepath, "r", encoding="utf-8") as f:
                 keywords.update(line.strip() for line in f if line.strip())
             files_used += 1
 
     # Write unique sorted keywords
-    output_file = os.path.join(directory, "combined-keywords.txt")
+    output_file = os.path.join(directory, "combined-keywords.dat")
     with open(output_file, "w", encoding="utf-8") as f:
         for keyword in sorted(keywords):
             f.write(f"{keyword}\n")

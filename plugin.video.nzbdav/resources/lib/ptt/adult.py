@@ -4,7 +4,7 @@ from typing import Set
 
 
 @cache
-def load_adult_keywords(filename: str = "combined-keywords.txt") -> Set[str]:
+def load_adult_keywords(filename: str = "combined-keywords.dat") -> Set[str]:
     """Load adult keywords from the keywords file."""
     keywords_file = Path(__file__).parent / filename
     keywords = set()
