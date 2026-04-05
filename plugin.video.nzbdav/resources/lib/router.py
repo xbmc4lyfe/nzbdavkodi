@@ -86,6 +86,11 @@ def _handle_play(params):
     season = params.get("season", "")
     episode = params.get("episode", "")
 
+    # Show progress spinner while searching
+    progress = xbmcgui.DialogProgress()
+    progress.create("NZB-DAV", "Searching for {}...".format(title))
+    progress.update(10)
+
     cache_kwargs = dict(year=year, imdb=imdb, season=season, episode=episode)
     results = get_cached(search_type, title, **cache_kwargs)
     if results is None:
@@ -96,23 +101,34 @@ def _handle_play(params):
             set_cached(search_type, title, results, **cache_kwargs)
 
     if not results:
+        progress.close()
         notify("NZB-DAV", "No results found for {}".format(title), 3000)
         return
 
+    if progress.iscanceled():
+        progress.close()
+        return
+
+    progress.update(60, "Filtering {} results...".format(len(results)))
     filtered = filter_results(results)
+
     if not filtered:
+        progress.close()
         notify("NZB-DAV", "All results filtered out for {}".format(title), 3000)
         return
+
+    progress.update(90, "Preparing {} results...".format(len(filtered)))
+    progress.close()
 
     # Auto-select best match if enabled
     addon = xbmcaddon.Addon()
     if addon.getSetting("auto_select_best").lower() == "true":
         selected = filtered[0]
     else:
-        # Show select dialog
+        # Show select dialog with detailed labels
         labels = [_format_label(item) for item in filtered]
         dialog = xbmcgui.Dialog()
-        choice = dialog.select("NZB-DAV: Select NZB", labels)
+        choice = dialog.select("NZB-DAV: {} results".format(len(filtered)), labels)
         if choice < 0:
             return  # User cancelled
         selected = filtered[choice]
@@ -172,45 +188,61 @@ def _handle_search(handle, params):
 
 
 def _format_label(item):
-    """Format a rich label with quality badges."""
-    meta = item.get("_meta", {})
-    parts = []
+    """Format a detailed label showing all parsed metadata.
 
-    # Resolution badge
+    Format: [RES] [HDR] [CODEC] [AUDIO] [LANG] | filename | GROUP | INDEXER | SIZE
+    """
+    meta = item.get("_meta", {})
+    badges = []
+
+    # Resolution
     res = meta.get("resolution", "")
     if res:
-        parts.append("[{}]".format(res))
+        badges.append("[COLOR cyan]{}[/COLOR]".format(res))
 
     # HDR
     hdr = meta.get("hdr", [])
     if hdr:
-        parts.append("/".join(hdr))
+        badges.append("[COLOR yellow]{}[/COLOR]".format(" ".join(hdr)))
 
-    # Title (truncated)
-    title = item.get("title", "")
-    if len(title) > 60:
-        title = title[:57] + "..."
-    parts.append(title)
+    # Video codec
+    codec = meta.get("codec", "")
+    if codec:
+        badges.append("[COLOR lime]{}[/COLOR]".format(codec))
 
     # Audio
     audio = meta.get("audio", [])
     if audio:
-        parts.append(audio[0])
+        badges.append("[COLOR orange]{}[/COLOR]".format(" ".join(audio)))
 
-    # Codec
-    codec = meta.get("codec", "")
-    if codec:
-        parts.append(codec)
+    # Languages
+    langs = meta.get("languages", [])
+    if langs:
+        badges.append("[COLOR skyblue]{}[/COLOR]".format(" ".join(langs)))
+
+    # Build badge line
+    badge_str = " ".join(badges) if badges else ""
+
+    # Filename
+    title = item.get("title", "")
+
+    # Release group
+    group = meta.get("group", "")
+    group_str = "[COLOR mediumpurple]{}[/COLOR]".format(group) if group else ""
+
+    # Indexer
+    indexer = item.get("indexer", "")
+    indexer_str = "[COLOR gray]{}[/COLOR]".format(indexer) if indexer else ""
 
     # Size
-    size_str = _format_size(item.get("size"))
-    parts.append(size_str)
+    size_str = "[COLOR silver]{}[/COLOR]".format(_format_size(item.get("size")))
 
-    # Group
-    group = meta.get("group", "")
-    if group:
-        parts.append("-" + group)
+    # Age
+    age = item.get("age", "")
+    age_str = "[COLOR gray]{}[/COLOR]".format(age) if age else ""
 
+    # Compose: badges | filename | group | indexer | size | age
+    parts = [badge_str, title, group_str, indexer_str, size_str, age_str]
     return " | ".join(p for p in parts if p)
 
 

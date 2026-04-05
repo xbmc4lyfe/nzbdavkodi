@@ -125,12 +125,12 @@ def test_format_size_very_large():
 def test_format_size_string_input():
     """_format_size should handle string input by converting to int."""
     # Sizes from NZBHydra come as strings
-    assert (
-        _format_size("5368709120") == "5.0 GB"
-    ), "_format_size should accept string byte counts"
-    assert (
-        _format_size("10485760") == "10.0 MB"
-    ), "_format_size should handle MB string input"
+    assert _format_size("5368709120") == "5.0 GB", (
+        "_format_size should accept string byte counts"
+    )
+    assert _format_size("10485760") == "10.0 MB", (
+        "_format_size should handle MB string input"
+    )
 
 
 # --- route() dispatch tests ---
@@ -189,12 +189,13 @@ def test_format_label_full():
         },
     }
     label = _format_label(item)
-    assert "[2160p]" in label
+    assert "2160p" in label
     assert "HDR10" in label
     assert "DTS-HD MA" in label
     assert "x265/HEVC" in label
     assert "GROUP" in label
     assert "GB" in label
+    assert "[COLOR" in label
 
 
 def test_format_label_minimal():
