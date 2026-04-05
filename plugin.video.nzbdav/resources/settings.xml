@@ -116,5 +116,15 @@
                 <setting id="download_timeout" type="integer" label="Download timeout (seconds)" default="3600"/>
             </group>
         </category>
+        <category id="cache" label="Search Cache">
+            <group id="cache_settings" label="Search Cache">
+                <setting id="cache_ttl" type="integer" label="Cache duration (seconds, 0=disabled)" default="300"/>
+            </group>
+        </category>
+        <category id="auto_select" label="Auto-Select">
+            <group id="auto_select_settings" label="Auto-Select">
+                <setting id="auto_select_best" type="boolean" label="Auto-select best match (skip result list)" default="false"/>
+            </group>
+        </category>
     </section>
 </settings>

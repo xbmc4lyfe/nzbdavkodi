@@ -1,7 +1,13 @@
 from unittest.mock import MagicMock, patch
 from urllib.parse import urlencode
 
-from resources.lib.router import _format_size, parse_params, parse_route, route
+from resources.lib.router import (
+    _format_label,
+    _format_size,
+    parse_params,
+    parse_route,
+    route,
+)
 
 
 def test_parse_route_root():
@@ -163,3 +169,47 @@ def test_route_dispatches_to_install_player(mock_install):
     # checking the module-level mock
     # The simplest check: route didn't raise an exception
     assert True, "route() with /install_player should complete without error"
+
+
+# --- _format_label tests ---
+
+
+def test_format_label_full():
+    """Test rich label formatting with all metadata."""
+    item = {
+        "title": "The.Matrix.1999.2160p.UHD.BluRay.REMUX.HEVC.DTS-HD.MA.7.1-GROUP",
+        "size": "45000000000",
+        "_meta": {
+            "resolution": "2160p",
+            "hdr": ["HDR10"],
+            "audio": ["DTS-HD MA"],
+            "codec": "x265/HEVC",
+            "group": "GROUP",
+            "languages": [],
+        },
+    }
+    label = _format_label(item)
+    assert "[2160p]" in label
+    assert "HDR10" in label
+    assert "DTS-HD MA" in label
+    assert "x265/HEVC" in label
+    assert "GROUP" in label
+    assert "GB" in label
+
+
+def test_format_label_minimal():
+    """Test label with no metadata."""
+    item = {
+        "title": "some.file.mkv",
+        "size": "",
+        "_meta": {
+            "resolution": "",
+            "hdr": [],
+            "audio": [],
+            "codec": "",
+            "group": "",
+            "languages": [],
+        },
+    }
+    label = _format_label(item)
+    assert "some.file.mkv" in label
