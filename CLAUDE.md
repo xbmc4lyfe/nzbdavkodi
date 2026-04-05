@@ -1,0 +1,66 @@
+# CLAUDE.md
+
+## Project Overview
+
+NZB-DAV Kodi addon (`plugin.video.nzbdav`) -- a player/resolver for Kodi 21 that searches NZBHydra2 for NZBs, submits them to nzbdav, polls until the stream is ready on nzbdav's WebDAV server, and plays it back. Registers as a TMDBHelper player.
+
+## Architecture
+
+Two external services, one addon:
+- **NZBHydra2**: Newznab API for NZB search (XML responses)
+- **nzbdav**: SABnzbd-compatible API for NZB submission + WebDAV for streaming
+- **This addon**: Bridges TMDBHelper -> NZBHydra2 -> nzbdav -> Kodi player
+
+Flow: TMDBHelper calls plugin:// URL -> router.py dispatches -> hydra.py searches -> filter.py filters with PTT -> user picks result -> resolver.py submits to nzbdav + polls -> webdav.py checks availability -> setResolvedUrl() plays stream.
+
+## Commands
+
+```bash
+just test          # Run all tests (101 tests, ~0.1s)
+just lint          # ruff + black check
+just lint-fix      # Auto-fix lint issues
+just release       # Build plugin.video.nzbdav.zip
+just ship          # test + release
+just clean         # Remove __pycache__, .pytest_cache, zip
+```
+
+## Code Layout
+
+- `plugin.video.nzbdav/` -- The Kodi addon (installed via zip)
+- `plugin.video.nzbdav/resources/lib/` -- All Python modules
+- `plugin.video.nzbdav/resources/lib/ptt/` -- Vendored PTT library (DO NOT EDIT unless fixing compatibility)
+- `tests/` -- pytest tests with Kodi module mocks in conftest.py
+
+## Key Patterns
+
+- **Lazy imports**: Kodi modules (xbmc, xbmcgui, etc.) are imported inside functions, not at module level, so tests can mock them via conftest.py
+- **Shared utilities**: `http_util.py` has `http_get()` and `notify()` -- don't duplicate HTTP or notification logic
+- **PTT vendored**: The ptt/ directory is a vendored copy of parse-torrent-title with `regex` replaced by `re` and `arrow` replaced by `datetime`. No pip packages required.
+- **Settings via Kodi API**: All config is in `resources/settings.xml` and read via `xbmcaddon.Addon().getSetting()`
+
+## Gotchas
+
+- **Python 3.8 minimum**: No walrus operators, match statements, or str.removeprefix. Target platform is CoreELEC on ARM64.
+- **No C extensions**: Everything must be pure Python (no compiled .so files). That's why we replaced `regex` with `re`.
+- **PTT regex patterns**: Some PTT patterns use features that produce FutureWarning with newer Python. Escape `[` inside character classes.
+- **setResolvedUrl**: MUST be called on ALL paths (success with True, failure with False) or Kodi hangs waiting for resolution.
+- **xbmc.Monitor.waitForAbort()**: Use instead of time.sleep() in loops so Kodi can shut down cleanly.
+- **Testing Kodi code**: conftest.py mocks all xbmc* modules globally. Add `plugin.video.nzbdav` and `plugin.video.nzbdav/resources/lib` to sys.path.
+
+## Adding New Features
+
+1. Add settings to `resources/settings.xml`
+2. Read them via `xbmcaddon.Addon().getSetting("setting_id")`
+3. Add tests that mock the setting values
+4. Run `just test` and `just lint`
+
+## Adding New Player Targets
+
+Add to `PLAYER_TARGETS` dict in `player_installer.py`:
+```python
+"AddonName": {
+    "setting_id": "install_addonname",
+    "path": "special://profile/addon_data/plugin.video.addonname/players/",
+}
+```
+Then add the corresponding boolean setting in `settings.xml`.

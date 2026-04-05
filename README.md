@@ -1,0 +1,144 @@
+# NZB-DAV Kodi Addon
+
+A Kodi 21 (Omega) player/resolver addon that enables Usenet-based streaming through NZBHydra2 and nzbdav. Works as a TMDBHelper player -- search for a movie or TV episode, pick an NZB, and stream it directly through nzbdav's WebDAV server.
+
+## How It Works
+
+```
+TMDBHelper (movie/episode)
+    -> NZB-DAV addon searches NZBHydra2
+    -> User picks an NZB from filtered results
+    -> Addon submits NZB to nzbdav
+    -> Polls nzbdav API + WebDAV until stream is ready
+    -> Kodi plays directly from nzbdav's WebDAV server
+```
+
+No separate SABnzbd needed -- nzbdav handles both downloading and serving.
+
+## Requirements
+
+- **Kodi 21 (Omega)** or later
+- **NZBHydra2** -- running and accessible
+- **nzbdav** -- running and accessible (provides both SABnzbd-compatible API and WebDAV)
+- **TMDBHelper** (or Fen, Seren) -- to trigger searches
+
+## Installation
+
+1. Download `plugin.video.nzbdav.zip` from the [releases page](../../releases)
+2. In Kodi: **Settings > Add-ons > Install from zip file**
+3. Select `plugin.video.nzbdav.zip`
+
+## Configuration
+
+Open the addon settings (**Add-ons > My add-ons > Video add-ons > NZB-DAV > Configure**):
+
+### Connection Settings
+
+| Setting | Description |
+|---------|-------------|
+| NZBHydra2 URL | URL to your NZBHydra2 instance (e.g., `http://192.168.1.100:5076`) |
+| NZBHydra2 API Key | API key from NZBHydra2's config |
+| nzbdav URL | URL to your nzbdav instance (e.g., `http://192.168.1.100:3000`) |
+| nzbdav API Key | API key from nzbdav's config |
+| WebDAV URL | Leave empty to use nzbdav URL, or set a different URL if WebDAV is on a separate port |
+| WebDAV Username | Username for WebDAV authentication |
+| WebDAV Password | Password for WebDAV authentication |
+
+### Player Installation
+
+Select which addons to install the NZB-DAV player file to:
+- TMDBHelper
+- Fen
+- Seren
+
+Then click **Install Player File** to copy `nzbdav.json` to the selected addons.
+
+### Quality Filters
+
+All filters default to **everything enabled** -- deselect what you don't want.
+
+- **Resolution**: 2160p, 1080p, 720p, 480p
+- **HDR**: HDR10, HDR10+, Dolby Vision, HLG, SDR
+- **Audio**: Atmos, TrueHD, DTS-HD MA, DTS:X, DD+, DD, AAC
+- **Video Codec**: x265/HEVC, x264/AVC, AV1, VP9, MPEG-2
+- **Language**: English, Spanish, French, German, Italian, Portuguese, Dutch, Russian, Japanese, Korean, Chinese, Arabic, Hindi
+
+### Keyword Filters
+
+- **Preferred release groups**: Comma-separated list (e.g., `SPARKS,FGT,NTb`) -- boosted to top
+- **Excluded release groups**: Comma-separated list -- removed from results
+- **Min/Max file size**: In MB (0 = no limit)
+- **Exclude/Require keywords**: Comma-separated
+
+### Sort & Display
+
+- **Sort by**: Relevance, Size (largest/smallest), Age (newest/oldest)
+- **Max results**: Maximum results to display (default: 25)
+
+### Polling
+
+- **Poll interval**: Seconds between status checks (default: 5)
+- **Download timeout**: Max wait time in seconds (default: 3600)
+
+## Usage
+
+1. Open **TMDBHelper** and browse to a movie or TV episode
+2. Select **Play with NZB-DAV**
+3. Pick an NZB from the filtered results list
+4. Wait for the download to complete (progress dialog shows status)
+5. Playback starts automatically from nzbdav's WebDAV server
+
+## Development
+
+### Prerequisites
+
+- Python 3.8+
+- [just](https://github.com/casey/just) (command runner)
+
+### Commands
+
+```bash
+just test          # Run all 101 tests
+just test-verbose  # Run tests with full output
+just lint          # Check ruff + black formatting
+just lint-fix      # Auto-fix lint issues
+just release       # Build plugin.video.nzbdav.zip
+just ship          # Run tests then build release
+just clean         # Remove build artifacts
+```
+
+### Project Structure
+
+```
+plugin.video.nzbdav/
+  addon.xml              # Kodi addon manifest
+  addon.py               # Entry point
+  resources/
+    settings.xml         # Kodi settings UI
+    players/nzbdav.json  # TMDBHelper player template
+    lib/
+      router.py          # URL routing
+      hydra.py           # NZBHydra2 API client
+      nzbdav_api.py      # nzbdav API client
+      webdav.py          # WebDAV availability checker
+      filter.py          # Result filtering with PTT
+      resolver.py        # Download + polling orchestrator
+      player_installer.py # Player JSON installer
+      http_util.py       # Shared HTTP utilities
+      ptt/               # Vendored PTT library
+tests/
+  conftest.py            # Kodi module mocks
+  test_*.py              # 101 tests
+```
+
+## Compatibility
+
+- Kodi 21 (Omega) and later
+- Python 3.8+
+- CoreELEC, LibreELEC, OSMC, Windows, macOS, Linux
+- ARM64 (aarch64), x86_64
+- No pip packages required -- all dependencies vendored
+
+## License
+
+MIT
