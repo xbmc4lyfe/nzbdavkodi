@@ -14,16 +14,19 @@ def _make_monitor(abort_after=None):
     return monitor
 
 
+@patch("resources.lib.resolver.PlaybackMonitor")
 @patch("resources.lib.resolver.xbmc")
 @patch("resources.lib.resolver.xbmcgui")
 @patch("resources.lib.resolver.xbmcplugin")
-@patch("resources.lib.resolver.check_file_available")
+@patch("resources.lib.resolver.check_file_available_with_retry")
 @patch("resources.lib.resolver.get_job_status")
 @patch("resources.lib.resolver.submit_nzb")
 @patch("resources.lib.resolver.get_webdav_stream_url")
+@patch("resources.lib.resolver.validate_stream")
 @patch("resources.lib.resolver._get_poll_settings")
 def test_resolve_success(
     mock_poll,
+    mock_validate,
     mock_stream_url,
     mock_submit,
     mock_status,
@@ -31,12 +34,14 @@ def test_resolve_success(
     mock_plugin,
     mock_gui,
     mock_xbmc,
+    mock_pb_monitor,
 ):
     mock_poll.return_value = (2, 60)
     mock_submit.return_value = "SABnzbd_nzo_abc123"
     mock_status.return_value = {"status": "Downloading", "percentage": "100"}
-    mock_webdav.return_value = True
+    mock_webdav.return_value = (True, None)
     mock_stream_url.return_value = "http://user:pass@webdav:8080/movie.mkv"
+    mock_validate.return_value = True
     mock_xbmc.Monitor.return_value = _make_monitor()
 
     dialog = MagicMock()
@@ -68,7 +73,7 @@ def test_resolve_submit_failure(mock_poll, mock_submit, mock_plugin, mock_gui):
 @patch("resources.lib.resolver.xbmc")
 @patch("resources.lib.resolver.xbmcgui")
 @patch("resources.lib.resolver.xbmcplugin")
-@patch("resources.lib.resolver.check_file_available")
+@patch("resources.lib.resolver.check_file_available_with_retry")
 @patch("resources.lib.resolver.get_job_status")
 @patch("resources.lib.resolver.submit_nzb")
 @patch("resources.lib.resolver._get_poll_settings")
@@ -78,7 +83,7 @@ def test_resolve_job_failed(
     mock_poll.return_value = (2, 60)
     mock_submit.return_value = "SABnzbd_nzo_abc123"
     mock_status.return_value = {"status": "Failed", "percentage": "0"}
-    mock_webdav.return_value = False
+    mock_webdav.return_value = (False, "not_found")
     mock_xbmc.Monitor.return_value = _make_monitor()
 
     dialog = MagicMock()
@@ -93,7 +98,7 @@ def test_resolve_job_failed(
 @patch("resources.lib.resolver.xbmc")
 @patch("resources.lib.resolver.xbmcgui")
 @patch("resources.lib.resolver.xbmcplugin")
-@patch("resources.lib.resolver.check_file_available")
+@patch("resources.lib.resolver.check_file_available_with_retry")
 @patch("resources.lib.resolver.get_job_status")
 @patch("resources.lib.resolver.submit_nzb")
 @patch("resources.lib.resolver._get_poll_settings")
@@ -103,7 +108,7 @@ def test_resolve_user_cancels(
     mock_poll.return_value = (2, 60)
     mock_submit.return_value = "SABnzbd_nzo_abc123"
     mock_status.return_value = {"status": "Downloading", "percentage": "50"}
-    mock_webdav.return_value = False
+    mock_webdav.return_value = (False, "not_found")
     mock_xbmc.Monitor.return_value = _make_monitor()
 
     dialog = MagicMock()
@@ -134,7 +139,7 @@ def test_resolve_no_nzb_url(mock_poll, mock_plugin, mock_gui, mock_notify):
 @patch("resources.lib.resolver.time")
 @patch("resources.lib.resolver.xbmcgui")
 @patch("resources.lib.resolver.xbmcplugin")
-@patch("resources.lib.resolver.check_file_available")
+@patch("resources.lib.resolver.check_file_available_with_retry")
 @patch("resources.lib.resolver.get_job_status")
 @patch("resources.lib.resolver.submit_nzb")
 @patch("resources.lib.resolver._get_poll_settings")
@@ -153,7 +158,7 @@ def test_resolve_timeout(
     mock_poll.return_value = (2, 5)  # 5 second timeout
     mock_submit.return_value = "SABnzbd_nzo_abc123"
     mock_status.return_value = {"status": "Downloading", "percentage": "10"}
-    mock_webdav.return_value = False
+    mock_webdav.return_value = (False, "not_found")
     mock_xbmc.Monitor.return_value = _make_monitor()
 
     dialog = MagicMock()
@@ -175,7 +180,7 @@ def test_resolve_timeout(
 @patch("resources.lib.resolver.xbmc")
 @patch("resources.lib.resolver.xbmcgui")
 @patch("resources.lib.resolver.xbmcplugin")
-@patch("resources.lib.resolver.check_file_available")
+@patch("resources.lib.resolver.check_file_available_with_retry")
 @patch("resources.lib.resolver.get_job_status")
 @patch("resources.lib.resolver.submit_nzb")
 @patch("resources.lib.resolver._get_poll_settings")
@@ -186,7 +191,7 @@ def test_resolve_deleted_status(
     mock_poll.return_value = (2, 60)
     mock_submit.return_value = "SABnzbd_nzo_abc123"
     mock_status.return_value = {"status": "Deleted", "percentage": "0"}
-    mock_webdav.return_value = False
+    mock_webdav.return_value = (False, "not_found")
     mock_xbmc.Monitor.return_value = _make_monitor()
 
     dialog = MagicMock()
@@ -201,16 +206,19 @@ def test_resolve_deleted_status(
 # --- New tests ---
 
 
+@patch("resources.lib.resolver.PlaybackMonitor")
 @patch("resources.lib.resolver.xbmc")
 @patch("resources.lib.resolver.xbmcgui")
 @patch("resources.lib.resolver.xbmcplugin")
-@patch("resources.lib.resolver.check_file_available")
+@patch("resources.lib.resolver.check_file_available_with_retry")
 @patch("resources.lib.resolver.get_job_status")
 @patch("resources.lib.resolver.submit_nzb")
 @patch("resources.lib.resolver.get_webdav_stream_url")
+@patch("resources.lib.resolver.validate_stream")
 @patch("resources.lib.resolver._get_poll_settings")
 def test_resolve_url_encoded_special_characters(
     mock_poll,
+    mock_validate,
     mock_stream_url,
     mock_submit,
     mock_status,
@@ -218,6 +226,7 @@ def test_resolve_url_encoded_special_characters(
     mock_plugin,
     mock_gui,
     mock_xbmc,
+    mock_pb_monitor,
 ):
     """resolve() URL-decodes nzburl and title before passing to submit_nzb."""
     from urllib.parse import quote
@@ -225,8 +234,9 @@ def test_resolve_url_encoded_special_characters(
     mock_poll.return_value = (2, 60)
     mock_submit.return_value = "SABnzbd_nzo_xyz789"
     mock_status.return_value = {"status": "Downloading", "percentage": "100"}
-    mock_webdav.return_value = True
+    mock_webdav.return_value = (True, None)
     mock_stream_url.return_value = "http://user:pass@webdav:8080/movie.mkv"
+    mock_validate.return_value = True
     mock_xbmc.Monitor.return_value = _make_monitor()
 
     dialog = MagicMock()
@@ -251,7 +261,7 @@ def test_resolve_url_encoded_special_characters(
 @patch("resources.lib.resolver.xbmc")
 @patch("resources.lib.resolver.xbmcgui")
 @patch("resources.lib.resolver.xbmcplugin")
-@patch("resources.lib.resolver.check_file_available")
+@patch("resources.lib.resolver.check_file_available_with_retry")
 @patch("resources.lib.resolver.get_job_status")
 @patch("resources.lib.resolver.submit_nzb")
 @patch("resources.lib.resolver._get_poll_settings")
@@ -269,7 +279,7 @@ def test_resolve_poll_interval_respected(
     mock_poll.return_value = (poll_interval, 3600)
     mock_submit.return_value = "SABnzbd_nzo_poll123"
     mock_status.return_value = {"status": "Downloading", "percentage": "50"}
-    mock_webdav.return_value = False
+    mock_webdav.return_value = (False, "not_found")
 
     dialog = MagicMock()
     dialog.iscanceled.side_effect = [False, True]
@@ -284,16 +294,19 @@ def test_resolve_poll_interval_respected(
     monitor.waitForAbort.assert_called_with(poll_interval)
 
 
+@patch("resources.lib.resolver.PlaybackMonitor")
 @patch("resources.lib.resolver.xbmc")
 @patch("resources.lib.resolver.xbmcgui")
 @patch("resources.lib.resolver.xbmcplugin")
-@patch("resources.lib.resolver.check_file_available")
+@patch("resources.lib.resolver.check_file_available_with_retry")
 @patch("resources.lib.resolver.get_job_status")
 @patch("resources.lib.resolver.submit_nzb")
 @patch("resources.lib.resolver.get_webdav_stream_url")
+@patch("resources.lib.resolver.validate_stream")
 @patch("resources.lib.resolver._get_poll_settings")
 def test_resolve_status_transitions_queued_to_downloading_to_available(
     mock_poll,
+    mock_validate,
     mock_stream_url,
     mock_submit,
     mock_status,
@@ -301,6 +314,7 @@ def test_resolve_status_transitions_queued_to_downloading_to_available(
     mock_plugin,
     mock_gui,
     mock_xbmc,
+    mock_pb_monitor,
 ):
     """resolve() handles Queued -> Downloading -> file-available transitions."""
     mock_poll.return_value = (1, 3600)
@@ -310,8 +324,9 @@ def test_resolve_status_transitions_queued_to_downloading_to_available(
         {"status": "Downloading", "percentage": "50"},
         {"status": "Downloading", "percentage": "100"},
     ]
-    mock_webdav.side_effect = [False, False, True]
+    mock_webdav.side_effect = [(False, "not_found"), (False, "not_found"), (True, None)]
     mock_stream_url.return_value = "http://user:pass@webdav:8080/downloaded.mkv"
+    mock_validate.return_value = True
 
     dialog = MagicMock()
     dialog.iscanceled.return_value = False
