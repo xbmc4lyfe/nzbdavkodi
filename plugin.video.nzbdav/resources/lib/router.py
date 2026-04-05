@@ -53,14 +53,23 @@ def route(argv):
         from resources.lib.player_installer import install_player
 
         install_player()
+    elif path == "/clear_cache":
+        from resources.lib.cache import clear_cache
+
+        clear_cache()
+        from resources.lib.http_util import notify
+
+        notify("NZB-DAV", "Search cache cleared", 3000)
     else:
         _handle_main_menu(handle)
 
 
 def _handle_search(handle, params):
     """Search NZBHydra and present filtered results as a directory listing."""
+    import xbmcaddon
     import xbmcplugin
 
+    from resources.lib.cache import get_cached, set_cached
     from resources.lib.filter import filter_results
     from resources.lib.hydra import search_hydra
 
@@ -71,9 +80,16 @@ def _handle_search(handle, params):
     season = params.get("season", "")
     episode = params.get("episode", "")
 
-    results = search_hydra(
-        search_type, title, year=year, imdb=imdb, season=season, episode=episode
-    )
+    cache_kwargs = dict(year=year, imdb=imdb, season=season, episode=episode)
+
+    # Check cache first
+    results = get_cached(search_type, title, **cache_kwargs)
+    if results is None:
+        results = search_hydra(
+            search_type, title, year=year, imdb=imdb, season=season, episode=episode
+        )
+        if results:
+            set_cached(search_type, title, results, **cache_kwargs)
 
     if not results:
         from resources.lib.http_util import notify
@@ -83,7 +99,60 @@ def _handle_search(handle, params):
         return
 
     filtered = filter_results(results)
+
+    # Auto-select best match if enabled
+    addon = xbmcaddon.Addon()
+    if addon.getSetting("auto_select_best").lower() == "true" and filtered:
+        best = filtered[0]
+        from resources.lib.resolver import resolve
+
+        resolve(handle, {"nzburl": best["link"], "title": best["title"]})
+        return
+
     _display_results(handle, filtered)
+
+
+def _format_label(item):
+    """Format a rich label with quality badges."""
+    meta = item.get("_meta", {})
+    parts = []
+
+    # Resolution badge
+    res = meta.get("resolution", "")
+    if res:
+        parts.append("[{}]".format(res))
+
+    # HDR
+    hdr = meta.get("hdr", [])
+    if hdr:
+        parts.append("/".join(hdr))
+
+    # Title (truncated)
+    title = item.get("title", "")
+    if len(title) > 60:
+        title = title[:57] + "..."
+    parts.append(title)
+
+    # Audio
+    audio = meta.get("audio", [])
+    if audio:
+        parts.append(audio[0])
+
+    # Codec
+    codec = meta.get("codec", "")
+    if codec:
+        parts.append(codec)
+
+    # Size
+    size_str = _format_size(item.get("size"))
+    parts.append(size_str)
+
+    # Group
+    group = meta.get("group", "")
+    if group:
+        parts.append("-" + group)
+
+    return " | ".join(p for p in parts if p)
 
 
 def _display_results(handle, results):
@@ -94,12 +163,7 @@ def _display_results(handle, results):
     import xbmcplugin
 
     for item in results:
-        label = "{} | {} | {} | {}".format(
-            item["title"],
-            _format_size(item["size"]),
-            item.get("indexer", ""),
-            item.get("age", ""),
-        )
+        label = _format_label(item)
         li = xbmcgui.ListItem(label=label)
         li.setInfo("video", {"title": item["title"]})
 
@@ -120,6 +184,11 @@ def _handle_main_menu(handle):
     # Install Player item
     li = xbmcgui.ListItem(label="Install Player File")
     url = "plugin://plugin.video.nzbdav/install_player"
+    xbmcplugin.addDirectoryItem(handle=handle, url=url, listitem=li, isFolder=False)
+
+    # Clear Cache item
+    li = xbmcgui.ListItem(label="Clear Cache")
+    url = "plugin://plugin.video.nzbdav/clear_cache"
     xbmcplugin.addDirectoryItem(handle=handle, url=url, listitem=li, isFolder=False)
 
     # Open Settings item
