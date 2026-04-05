@@ -43,7 +43,9 @@ def route(argv):
 
     xbmc.log("NZB-DAV: Routing path='{}' params={}".format(path, params), xbmc.LOGDEBUG)
 
-    if path == "/search":
+    if path == "/play":
+        _handle_play(params)
+    elif path == "/search":
         _handle_search(handle, params)
     elif path == "/resolve":
         from resources.lib.resolver import resolve
@@ -62,6 +64,63 @@ def route(argv):
         notify("NZB-DAV", "Search cache cleared", 3000)
     else:
         _handle_main_menu(handle)
+
+
+def _handle_play(params):
+    """Full play flow: search, filter, show select dialog, resolve, play.
+
+    Called via executebuiltin://RunPlugin from TMDBHelper player JSON.
+    """
+    import xbmcaddon
+    import xbmcgui
+
+    from resources.lib.cache import get_cached, set_cached
+    from resources.lib.filter import filter_results
+    from resources.lib.http_util import notify
+    from resources.lib.hydra import search_hydra
+
+    search_type = params.get("type", "movie")
+    title = params.get("title", "")
+    year = params.get("year", "")
+    imdb = params.get("imdb", "")
+    season = params.get("season", "")
+    episode = params.get("episode", "")
+
+    cache_kwargs = dict(year=year, imdb=imdb, season=season, episode=episode)
+    results = get_cached(search_type, title, **cache_kwargs)
+    if results is None:
+        results = search_hydra(
+            search_type, title, year=year, imdb=imdb, season=season, episode=episode
+        )
+        if results:
+            set_cached(search_type, title, results, **cache_kwargs)
+
+    if not results:
+        notify("NZB-DAV", "No results found for {}".format(title), 3000)
+        return
+
+    filtered = filter_results(results)
+    if not filtered:
+        notify("NZB-DAV", "All results filtered out for {}".format(title), 3000)
+        return
+
+    # Auto-select best match if enabled
+    addon = xbmcaddon.Addon()
+    if addon.getSetting("auto_select_best").lower() == "true":
+        selected = filtered[0]
+    else:
+        # Show select dialog
+        labels = [_format_label(item) for item in filtered]
+        dialog = xbmcgui.Dialog()
+        choice = dialog.select("NZB-DAV: Select NZB", labels)
+        if choice < 0:
+            return  # User cancelled
+        selected = filtered[choice]
+
+    # Resolve and play
+    from resources.lib.resolver import resolve_and_play
+
+    resolve_and_play(selected["link"], selected["title"])
 
 
 def _handle_search(handle, params):

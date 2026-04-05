@@ -209,3 +209,76 @@ def resolve(handle, params):
             xbmc.log("NZB-DAV: Kodi shutdown detected, aborting resolve", xbmc.LOGINFO)
             dialog.close()
             return
+
+
+def resolve_and_play(nzb_url, title):
+    """Submit NZB, poll until ready, play directly via xbmc.Player.
+
+    Used when called via executebuiltin://RunPlugin (not plugin:// directory).
+    """
+    poll_interval, download_timeout = _get_poll_settings()
+
+    dialog = xbmcgui.DialogProgress()
+    dialog.create("NZB-DAV", "Submitting NZB to nzbdav...")
+
+    xbmc.log("NZB-DAV: Submitting NZB for '{}'".format(title), xbmc.LOGINFO)
+    nzo_id = submit_nzb(nzb_url, title)
+    if not nzo_id:
+        dialog.close()
+        _notify("NZB-DAV", "Failed to submit NZB to nzbdav")
+        return
+
+    xbmc.log("NZB-DAV: NZB submitted, nzo_id={}, polling".format(nzo_id), xbmc.LOGINFO)
+
+    monitor = xbmc.Monitor()
+    start_time = time.time()
+
+    while True:
+        elapsed = time.time() - start_time
+
+        if elapsed >= download_timeout:
+            dialog.close()
+            _notify("NZB-DAV", "Download timed out")
+            return
+
+        if dialog.iscanceled():
+            dialog.close()
+            return
+
+        job_status, file_available, webdav_error = _poll_once(nzo_id, title)
+
+        if job_status:
+            status = job_status.get("status", "Unknown")
+            percentage = job_status.get("percentage", "0")
+
+            if status.lower() in ("failed", "deleted"):
+                dialog.close()
+                _notify("NZB-DAV", "Download failed")
+                return
+
+            msg = _STATUS_MESSAGES.get(status, "Status: {}".format(status))
+            if "{}" in msg:
+                msg = msg.format(percentage)
+            progress = min(int(percentage or 0), 100)
+            dialog.update(progress, msg)
+
+        if webdav_error == "auth_failed":
+            dialog.close()
+            _notify("NZB-DAV", _ERROR_MESSAGES["auth_failed"])
+            return
+
+        if file_available:
+            dialog.close()
+            stream_url = get_webdav_stream_url(title)
+            xbmc.log("NZB-DAV: Playing '{}' via WebDAV".format(title), xbmc.LOGINFO)
+            li = xbmcgui.ListItem(path=stream_url)
+            xbmc.Player().play(stream_url, li)
+
+            # Start playback monitoring
+            pb_monitor = PlaybackMonitor(stream_url, title=title)
+            pb_monitor.start_monitoring()
+            return
+
+        if monitor.waitForAbort(poll_interval):
+            dialog.close()
+            return
