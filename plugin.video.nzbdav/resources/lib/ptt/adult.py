@@ -1,4 +1,9 @@
-from functools import cache
+try:
+    from functools import cache
+except ImportError:
+    from functools import lru_cache
+
+    cache = lru_cache(maxsize=None)
 from pathlib import Path
 from typing import Set
 

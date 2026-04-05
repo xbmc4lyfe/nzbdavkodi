@@ -131,60 +131,61 @@ def _handle_search(handle, params):
 
 
 def _format_label(item):
-    """Format a compact label with parsed metadata. No color tags for compatibility.
+    """Format label showing all parsed PTT elements.
 
-    Format: [RES HDR] CODEC AUDIO | SIZE | GROUP | INDEXER | age
-    Line 2 (if using ListItem): filename
+    Shows: RES | HDR | CODEC | AUDIO | LANG | SIZE | GROUP | INDEXER | AGE
+    Each element only shown if detected.
     """
     meta = item.get("_meta", {})
-    tags = []
+    parts = []
 
-    # Resolution + HDR combined
+    # Resolution
     res = meta.get("resolution", "")
+    if res:
+        parts.append(res)
+
+    # HDR (all formats)
     hdr = meta.get("hdr", [])
-    if res and hdr:
-        tags.append("{} {}".format(res, "/".join(hdr)))
-    elif res:
-        tags.append(res)
+    if hdr:
+        parts.append("/".join(hdr))
 
     # Video codec
     codec = meta.get("codec", "")
     if codec:
-        tags.append(codec)
+        parts.append(codec)
 
-    # Audio (first only for brevity)
+    # Audio (all codecs)
     audio = meta.get("audio", [])
     if audio:
-        tags.append(audio[0])
+        parts.append(" ".join(audio))
 
     # Languages
     langs = meta.get("languages", [])
     if langs:
-        tags.append("/".join(langs))
-
-    # Build the quality portion
-    quality = " ".join(tags) if tags else "Unknown"
+        parts.append("/".join(langs))
 
     # Size
     size_str = _format_size(item.get("size"))
+    if size_str and size_str != "N/A":
+        parts.append(size_str)
 
     # Release group
     group = meta.get("group", "")
+    if group:
+        parts.append(group)
 
     # Indexer
     indexer = item.get("indexer", "")
+    if indexer:
+        parts.append(indexer)
 
     # Age
     age = item.get("age", "")
-
-    # Line 1: [quality] | size | group | indexer | age
-    parts = ["[{}]".format(quality), size_str]
-    if group:
-        parts.append(group)
-    if indexer:
-        parts.append(indexer)
     if age:
         parts.append(age)
+
+    if not parts:
+        return _format_size(item.get("size")) or "Unknown"
 
     return " | ".join(parts)
 
@@ -193,14 +194,52 @@ def _display_results(handle, results):
     """Add filtered results to the Kodi directory listing."""
     from urllib.parse import quote
 
+    import xbmcaddon
     import xbmcgui
     import xbmcplugin
 
+    addon = xbmcaddon.Addon()
+    addon_path = addon.getAddonInfo("path")
+
+    import os
+
+    icon = os.path.join(addon_path, "resources", "icon.png")
+    fanart = os.path.join(addon_path, "resources", "fanart.jpg")
+
     for item in results:
+        meta = item.get("_meta", {})
+
+        # Line 1: all parsed details
         label = _format_label(item)
-        li = xbmcgui.ListItem(label=label)
-        li.setInfo("video", {"title": item["title"]})
+        # Line 2: full filename
+        label2 = item.get("title", "")
+
+        li = xbmcgui.ListItem(label=label, label2=label2)
         li.setProperty("IsPlayable", "true")
+
+        # Set video info tags for skin badges (5.1, codec, resolution etc.)
+        info = {"title": label2}
+        res = meta.get("resolution", "")
+        if res:
+            # Map to Kodi video width for resolution badge
+            res_map = {"2160p": 3840, "1080p": 1920, "720p": 1280, "480p": 720}
+            width = res_map.get(res, 0)
+            if width:
+                info["videowidth"] = width
+        codec = meta.get("codec", "")
+        if codec:
+            info["videocodec"] = codec
+        audio = meta.get("audio", [])
+        if audio:
+            info["audiocodec"] = audio[0]
+        # Channel info for 5.1/7.1 badges
+        size = item.get("size", "")
+        if size:
+            info["size"] = int(size)
+        li.setInfo("video", info)
+
+        # Artwork
+        li.setArt({"icon": icon, "thumb": icon, "fanart": fanart})
 
         url = "plugin://plugin.video.nzbdav/resolve?nzburl={}&title={}".format(
             quote(item["link"], safe=""),
