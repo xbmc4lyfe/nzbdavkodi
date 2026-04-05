@@ -21,7 +21,7 @@ lint-fix:
 # Build the addon zip for Kodi installation
 release:
     #!/usr/bin/env python3
-    import zipfile, os, time
+    import zipfile, os
     zip_path = "plugin.video.nzbdav.zip"
     addon_dir = "plugin.video.nzbdav"
     skip_dirs = {"__pycache__", ".pytest_cache"}
@@ -30,26 +30,17 @@ release:
     if os.path.exists(zip_path):
         os.remove(zip_path)
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        # Walk and collect all directories and files
         for root, dirs, files in os.walk(addon_dir):
             dirs[:] = sorted(d for d in dirs if d not in skip_dirs)
-            # Add explicit directory entry (Kodi requires these)
-            dir_entry = root.replace(os.sep, "/") + "/"
-            zf.mkdir(dir_entry.rstrip("/"))
             for f in sorted(files):
                 if f in skip_files or os.path.splitext(f)[1] in skip_ext:
                     continue
                 filepath = os.path.join(root, f)
                 arcname = filepath.replace(os.sep, "/")
                 zf.write(filepath, arcname)
-    # Verify structure
-    with zipfile.ZipFile(zip_path) as zf:
-        names = zf.namelist()
-        first = names[0] if names else ""
-        assert first == "plugin.video.nzbdav/", "Bad zip: first entry is " + repr(first)
     size = os.path.getsize(zip_path)
-    print("Created {} ({} entries, {:.0f} KB)".format(zip_path, len(names), size/1024))
-    print("First entry: " + repr(first))
+    entries = len(zipfile.ZipFile(zip_path).namelist())
+    print("Created {} ({} entries, {:.0f} KB)".format(zip_path, entries, size/1024))
     print("Install in Kodi: Settings > Add-ons > Install from zip file")
 
 # Run tests then build release
