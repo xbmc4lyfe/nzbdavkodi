@@ -5,3 +5,6 @@ __pycache__/
 dist/
 build/
 plugin.video.nzbdav.zip
+docs/
+.DS_Store
+~/
