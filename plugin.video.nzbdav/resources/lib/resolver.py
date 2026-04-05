@@ -10,7 +10,6 @@ import xbmcplugin
 
 from resources.lib.http_util import notify as _notify
 from resources.lib.nzbdav_api import get_job_history, get_job_status, submit_nzb
-from resources.lib.playback_monitor import PlaybackMonitor
 from resources.lib.webdav import (
     check_file_available_with_retry,
     find_video_file,
@@ -214,10 +213,6 @@ def resolve(handle, params):
 
                 li = xbmcgui.ListItem(path=stream_url)
                 xbmcplugin.setResolvedUrl(handle, True, li)
-
-                # Start playback monitoring for auto-retry on stream drops
-                pb_monitor = PlaybackMonitor(stream_url, title=title)
-                pb_monitor.start_monitoring()
                 return
 
         # Handle WebDAV error types
@@ -308,10 +303,6 @@ def resolve_and_play(nzb_url, title):
                 xbmc.log("NZB-DAV: Playing '{}'".format(stream_url), xbmc.LOGINFO)
                 li = xbmcgui.ListItem(path=stream_url)
                 xbmc.Player().play(stream_url, li)
-
-                # Start playback monitoring
-                pb_monitor = PlaybackMonitor(stream_url, title=title)
-                pb_monitor.start_monitoring()
                 return
 
         if monitor.waitForAbort(poll_interval):
