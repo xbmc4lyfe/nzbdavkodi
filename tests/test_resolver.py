@@ -50,7 +50,6 @@ def test_storage_to_webdav_path_trailing_slash():
 # --- resolve() tests ---
 
 
-@patch("resources.lib.resolver.PlaybackMonitor")
 @patch("resources.lib.resolver.xbmc")
 @patch("resources.lib.resolver.xbmcgui")
 @patch("resources.lib.resolver.xbmcplugin")
@@ -72,7 +71,6 @@ def test_resolve_success(
     mock_plugin,
     mock_gui,
     mock_xbmc,
-    mock_pb_monitor,
 ):
     mock_poll.return_value = (2, 60)
     mock_submit.return_value = "SABnzbd_nzo_abc123"
@@ -271,7 +269,6 @@ def test_resolve_deleted_status(
 # --- New tests ---
 
 
-@patch("resources.lib.resolver.PlaybackMonitor")
 @patch("resources.lib.resolver.xbmc")
 @patch("resources.lib.resolver.xbmcgui")
 @patch("resources.lib.resolver.xbmcplugin")
@@ -293,7 +290,6 @@ def test_resolve_url_encoded_special_characters(
     mock_plugin,
     mock_gui,
     mock_xbmc,
-    mock_pb_monitor,
 ):
     """resolve() URL-decodes nzburl and title before passing to submit_nzb."""
     from urllib.parse import quote
@@ -368,7 +364,6 @@ def test_resolve_poll_interval_respected(
     monitor.waitForAbort.assert_called_with(poll_interval)
 
 
-@patch("resources.lib.resolver.PlaybackMonitor")
 @patch("resources.lib.resolver.xbmc")
 @patch("resources.lib.resolver.xbmcgui")
 @patch("resources.lib.resolver.xbmcplugin")
@@ -390,7 +385,6 @@ def test_resolve_status_transitions_queued_to_downloading_to_completed(
     mock_plugin,
     mock_gui,
     mock_xbmc,
-    mock_pb_monitor,
 ):
     """resolve() handles Queued -> Downloading -> Completed via history."""
     mock_poll.return_value = (1, 3600)
