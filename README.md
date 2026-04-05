@@ -74,7 +74,7 @@ All filters default to **everything enabled** -- deselect what you don't want.
 
 ### Sort & Display
 
-- **Sort by**: Relevance, Size (largest/smallest), Age (newest/oldest)
+- **Sort by**: Relevance (resolution > HDR > preferred group > audio > size), Size (largest/smallest), Age (newest/oldest)
 - **Max results**: Maximum results to display (default: 25)
 
 ### Polling
@@ -95,7 +95,7 @@ All filters default to **everything enabled** -- deselect what you don't want.
 
 1. Open **TMDBHelper** and browse to a movie or TV episode
 2. Select **Play with NZB-DAV**
-3. Pick an NZB from the filtered results list -- results display rich quality labels showing resolution, HDR format, audio codec, video codec, file size, and release group at a glance
+3. Pick an NZB from the custom full-screen results dialog -- each result shows two lines: filename with size/age/indexer/group on line 1, and resolution/HDR/codec/audio/source with color-coded labels on line 2
 4. Wait for the download to complete (progress dialog shows status)
 5. Playback starts automatically from nzbdav's WebDAV server
 
@@ -111,7 +111,7 @@ With **Auto-select best match** enabled, step 3 is skipped -- the addon automati
 ### Commands
 
 ```bash
-just test          # Run all 111 tests
+just test          # Run all 132 tests
 just test-verbose  # Run tests with full output
 just lint          # Check ruff + black formatting
 just lint-fix      # Auto-fix lint issues
@@ -135,14 +135,20 @@ plugin.video.nzbdav/
       nzbdav_api.py      # nzbdav API client
       webdav.py          # WebDAV availability checker
       filter.py          # Result filtering with PTT
+      results_dialog.py  # Custom full-screen results dialog
       resolver.py        # Download + polling orchestrator
       cache.py           # JSON-based search result cache
       player_installer.py # Player JSON installer
       http_util.py       # Shared HTTP utilities
       ptt/               # Vendored PTT library
+    skins/Default/
+      1080i/results-dialog.xml  # Dialog skin XML
+      media/white.png           # Texture for backgrounds
 tests/
   conftest.py            # Kodi module mocks
-  test_*.py              # 111 tests
+  test_*.py              # 132 tests
+mockups/
+  results-mockups.html   # Design reference mockup
 ```
 
 ## Compatibility
