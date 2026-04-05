@@ -131,63 +131,55 @@ def _handle_search(handle, params):
 
 
 def _format_label(item):
-    """Format label showing all parsed PTT elements.
+    """Format label with parsed PTT elements and filename.
 
-    Shows: RES | HDR | CODEC | AUDIO | LANG | SIZE | GROUP | INDEXER | AGE
-    Each element only shown if detected.
+    Line: RES HDR CODEC AUDIO LANG | SIZE | GROUP | INDEXER | AGE
+          FILENAME
     """
     meta = item.get("_meta", {})
-    parts = []
 
-    # Resolution
+    # Quality tags grouped together
+    tags = []
     res = meta.get("resolution", "")
     if res:
-        parts.append(res)
-
-    # HDR (all formats)
+        tags.append(res)
     hdr = meta.get("hdr", [])
     if hdr:
-        parts.append("/".join(hdr))
-
-    # Video codec
+        tags.append("/".join(hdr))
     codec = meta.get("codec", "")
     if codec:
-        parts.append(codec)
-
-    # Audio (all codecs)
+        tags.append(codec)
     audio = meta.get("audio", [])
     if audio:
-        parts.append(" ".join(audio))
-
-    # Languages
+        tags.append(" ".join(audio))
     langs = meta.get("languages", [])
     if langs:
-        parts.append("/".join(langs))
+        tags.append("/".join(langs))
 
-    # Size
+    quality = " ".join(tags) if tags else ""
+
+    # Info parts
+    parts = []
+    if quality:
+        parts.append(quality)
     size_str = _format_size(item.get("size"))
     if size_str and size_str != "N/A":
         parts.append(size_str)
-
-    # Release group
     group = meta.get("group", "")
     if group:
         parts.append(group)
-
-    # Indexer
     indexer = item.get("indexer", "")
     if indexer:
         parts.append(indexer)
-
-    # Age
     age = item.get("age", "")
     if age:
         parts.append(age)
 
-    if not parts:
-        return _format_size(item.get("size")) or "Unknown"
+    info_line = " | ".join(parts) if parts else "Unknown"
 
-    return " | ".join(parts)
+    # Include filename on same label since label2 doesn't show in all skins
+    title = item.get("title", "")
+    return "{}\n{}".format(info_line, title)
 
 
 def _display_results(handle, results):
