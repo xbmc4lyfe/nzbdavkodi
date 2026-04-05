@@ -1,0 +1,11 @@
+[tool.ruff]
+target-version = "py38"
+exclude = ["plugin.video.nzbdav/resources/lib/ptt/"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+
+[tool.black]
+target-version = ["py38"]
+line-length = 88
+extend-exclude = "ptt/"

@@ -1,8 +1,9 @@
 from unittest.mock import patch
+
 from resources.lib.filter import (
+    _sort_results,
     filter_results,
     parse_title_metadata,
-    _sort_results,
 )
 
 
@@ -423,3 +424,116 @@ def test_sort_relevance_preserves_order():
     assert sorted_r[0]["title"] == "First"
     assert sorted_r[1]["title"] == "Second"
     assert sorted_r[2]["title"] == "Third"
+
+
+# --- New tests ---
+
+
+def test_parse_title_metadata_multiple_audio_codecs():
+    """Real PTT parsing of a TrueHD Atmos title should detect both audio codecs."""
+    meta = parse_title_metadata(
+        "The.Dark.Knight.2008.2160p.UHD.BluRay.REMUX.HDR.HEVC.TrueHD.Atmos.7.1-GROUP"
+    )
+    audio = meta["audio"]
+    assert len(audio) >= 1, "Should detect at least one audio codec"
+    # TrueHD and Atmos are both present; at least one of them should be recognized
+    assert any(
+        a in ("TrueHD", "Atmos") for a in audio
+    ), "TrueHD.Atmos title should have TrueHD or Atmos in audio list"
+
+
+@patch("resources.lib.filter._get_filter_settings")
+def test_filter_tv_episode_title_with_season_episode(mock_settings):
+    """TV episode titles in SxxExx format should pass resolution and codec filters."""
+    mock_settings.return_value = {
+        "resolutions": ["1080p"],
+        "hdr": [],
+        "audio": [],
+        "codecs": ["x265/HEVC", "x264/AVC"],
+        "languages": [],
+        "exclude_keywords": [],
+        "require_keywords": [],
+        "release_group": [],
+        "exclude_release_group": [],
+        "min_size": 0,
+        "max_size": 0,
+        "sort_order": 0,
+        "max_results": 25,
+    }
+    results = [
+        _make_result("Breaking.Bad.S05E14.Ozymandias.1080p.BluRay.x265.DTS-HD.MA-NTb"),
+        _make_result("Breaking.Bad.S05E14.Ozymandias.720p.WEB-DL.x264-GRP"),
+        _make_result("Breaking.Bad.S05E14.Ozymandias.2160p.BluRay.HEVC-SPARKS"),
+    ]
+    filtered = filter_results(results)
+    assert len(filtered) == 1, "Only the 1080p result should pass the resolution filter"
+    assert "S05E14" in filtered[0]["title"], "Filtered result should be the TV episode"
+    assert "1080p" in filtered[0]["title"]
+
+
+@patch("resources.lib.filter._get_filter_settings")
+def test_filter_no_resolution_detected_passes_when_all_enabled(mock_settings):
+    """Results with no detected resolution should pass when all resolutions enabled."""
+    mock_settings.return_value = _all_pass_settings()
+    results = [
+        _make_result("Some.Old.Movie.DVDRip.x264-GRP"),
+        _make_result("Another.Release.HDTV.x264-GRP"),
+    ]
+    filtered = filter_results(results)
+    assert (
+        len(filtered) == 2
+    ), "Results with no detected resolution should pass when all resolutions enabled"
+
+
+@patch("resources.lib.filter._get_filter_settings")
+def test_filter_combined_resolution_audio_codec(mock_settings):
+    """Combined resolution + audio + codec filters should all apply simultaneously."""
+    mock_settings.return_value = {
+        "resolutions": ["1080p"],
+        "hdr": [],
+        "audio": ["DTS-HD MA"],
+        "codecs": ["x265/HEVC"],
+        "languages": [],
+        "exclude_keywords": [],
+        "require_keywords": [],
+        "release_group": [],
+        "exclude_release_group": [],
+        "min_size": 0,
+        "max_size": 0,
+        "sort_order": 0,
+        "max_results": 25,
+    }
+    results = [
+        # matches all three filters
+        _make_result("Movie.2024.1080p.BluRay.HEVC.DTS-HD.MA.7.1-GRP"),
+        # wrong codec (x264 instead of HEVC)
+        _make_result("Movie.2024.1080p.BluRay.x264.DTS-HD.MA-GRP"),
+        # wrong resolution
+        _make_result("Movie.2024.720p.BluRay.HEVC.DTS-HD.MA-GRP"),
+        # wrong audio
+        _make_result("Movie.2024.1080p.BluRay.HEVC.AAC-GRP"),
+    ]
+    filtered = filter_results(results)
+    assert len(filtered) == 1, "Only the result matching all three filters should pass"
+    assert "HEVC" in filtered[0]["title"], "Filtered result should contain HEVC"
+    assert "DTS-HD" in filtered[0]["title"], "Filtered result should contain DTS-HD"
+
+
+@patch("resources.lib.filter._get_filter_settings")
+def test_filter_results_attaches_meta_key(mock_settings):
+    """filter_results should attach a _meta key to each result that passes."""
+    mock_settings.return_value = _all_pass_settings()
+    results = [
+        _make_result("Movie.2024.1080p.BluRay.x264-GRP"),
+        _make_result("Another.2023.2160p.UHD.BluRay.HEVC-SPARKS"),
+    ]
+    filtered = filter_results(results)
+    assert len(filtered) == 2
+    for item in filtered:
+        assert "_meta" in item, "Each filtered result must have a _meta key"
+        meta = item["_meta"]
+        assert "resolution" in meta, "_meta must contain resolution"
+        assert "codec" in meta, "_meta must contain codec"
+        assert "audio" in meta, "_meta must contain audio list"
+        assert "hdr" in meta, "_meta must contain hdr list"
+        assert "group" in meta, "_meta must contain group"

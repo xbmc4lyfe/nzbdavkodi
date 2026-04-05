@@ -15,5 +15,9 @@
         <description lang="en_GB">Search NZBHydra2 for NZBs and stream via nzbdav WebDAV. Works as a TMDBHelper player.</description>
         <platform>all</platform>
         <license>MIT</license>
+        <assets>
+            <icon>resources/icon.png</icon>
+            <fanart>resources/fanart.jpg</fanart>
+        </assets>
     </extension>
 </addon>
