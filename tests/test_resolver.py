@@ -47,7 +47,7 @@ def test_resolve_submit_failure(mock_poll, mock_submit, mock_plugin, mock_gui):
 
     resolve(1, {"nzburl": "http://hydra/getnzb/abc", "title": "movie.mkv"})
 
-    mock_plugin.setResolvedUrl.assert_not_called()
+    mock_plugin.setResolvedUrl.assert_called_once_with(1, False, mock_gui.ListItem())
 
 
 @patch("resources.lib.resolver.xbmcgui")
@@ -70,7 +70,7 @@ def test_resolve_job_failed(
 
     resolve(1, {"nzburl": "http://hydra/getnzb/abc", "title": "movie.mkv"})
 
-    mock_plugin.setResolvedUrl.assert_not_called()
+    mock_plugin.setResolvedUrl.assert_called_once_with(1, False, mock_gui.ListItem())
 
 
 @patch("resources.lib.resolver.xbmcgui")
@@ -93,4 +93,4 @@ def test_resolve_user_cancels(
 
     resolve(1, {"nzburl": "http://hydra/getnzb/abc", "title": "movie.mkv"})
 
-    mock_plugin.setResolvedUrl.assert_not_called()
+    mock_plugin.setResolvedUrl.assert_called_once_with(1, False, mock_gui.ListItem())

@@ -1,4 +1,4 @@
-import regex
+import re as regex
 
 from ptt.adult import is_adult_content
 from ptt.parse import Parser
@@ -142,8 +142,8 @@ def add_defaults(parser: Parser):
     parser.add_handler(
         "extras",
         regex.compile(
-            r"(?:(?<=\b(?:19\d{2}|20\d{2})\b.*)\b(?:Featurettes?)\b|\bFeaturettes?\b(?!.*\b(?:19\d{2}|20\d{2})\b))",
-            regex.IGNORECASE,
+            r"(?:\b(?:19\d{2}|20\d{2})\b.*?\bFeaturettes?\b|\bFeaturettes?\b(?!.*\b(?:19\d{2}|20\d{2})\b))",
+            regex.IGNORECASE | regex.DOTALL,
         ),
         uniq_concat(value("Featurette")),
         {"skipFromTitle": True, "remove": False},
@@ -151,8 +151,8 @@ def add_defaults(parser: Parser):
     parser.add_handler(
         "extras",
         regex.compile(
-            r"(?:(?<=\b(?:19\d{2}|20\d{2})\b.*)\b(?:Sample)\b|\b(?:Sample)\b(?!.*\b(?:19\d{2}|20\d{2})\b))",
-            regex.IGNORECASE,
+            r"(?:\b(?:19\d{2}|20\d{2})\b.*?\bSample\b|\bSample\b(?!.*\b(?:19\d{2}|20\d{2})\b))",
+            regex.IGNORECASE | regex.DOTALL,
         ),
         uniq_concat(value("Sample")),
         {"skipFromTitle": True, "remove": False},
@@ -160,8 +160,8 @@ def add_defaults(parser: Parser):
     parser.add_handler(
         "extras",
         regex.compile(
-            r"(?:(?<=\b(?:19\d{2}|20\d{2})\b.*)\b(?:Trailers?)\b|\bTrailers?\b(?!.*\b(?:19\d{2}|20\d{2}|.(Park|And))\b))",
-            regex.IGNORECASE,
+            r"(?:\b(?:19\d{2}|20\d{2})\b.*?\bTrailers?\b|\bTrailers?\b(?!.*\b(?:19\d{2}|20\d{2}|.(Park|And))\b))",
+            regex.IGNORECASE | regex.DOTALL,
         ),
         uniq_concat(value("Trailer")),
         {"skipFromTitle": True, "remove": False},
@@ -490,7 +490,7 @@ def add_defaults(parser: Parser):
     parser.add_handler(
         "year",
         regex.compile(
-            r"[^SE][([]?(?!^)(?<!\d|Cap[. ]?)((?:19\d|20[012])\d)(?!\d|kbps)[)\]]?",
+            r"[^SE][([]?(?<!\d)(?<!Cap)(?<!Cap[. ])((?:19\d|20[012])\d)(?!\d|kbps)[)\]]?",
             regex.IGNORECASE,
         ),
         integer,
@@ -713,7 +713,7 @@ def add_defaults(parser: Parser):
     )
     parser.add_handler(
         "quality",
-        regex.compile(r"(?<=remux.*)\bBlu[ .-]*Ray\b", regex.IGNORECASE),
+        regex.compile(r"remux.*?\bBlu[ .-]*Ray\b", regex.IGNORECASE | regex.DOTALL),
         value("BluRay REMUX"),
         {"remove": True},
     )
@@ -1294,7 +1294,9 @@ def add_defaults(parser: Parser):
     )
     parser.add_handler(
         "complete",
-        regex.compile(r"(?<!A.?|The.?)\bComplete\b", regex.IGNORECASE),
+        regex.compile(
+            r"(?<!A )(?<!A\.)(?<!The )(?<!The\.)\bComplete\b", regex.IGNORECASE
+        ),
         boolean,
         {"remove": True},
     )
@@ -1458,7 +1460,7 @@ def add_defaults(parser: Parser):
     parser.add_handler(
         "seasons",
         regex.compile(
-            r"(?<!\bEp?(?:isode)? ?\d+\b.*)\b(\d{2})[ ._]\d{2}(?:.F)?\.\w{2,4}$"
+            r"(?<!Ep)(?<!sode)(?<!ep)(?<!isode)\b(\d{2})[ ._]\d{2}(?:.F)?\.\w{2,4}$"
         ),
         array(integer),
     )
@@ -1590,16 +1592,14 @@ def add_defaults(parser: Parser):
     )
     parser.add_handler(
         "episodes",
-        regex.compile(
-            r"(?<=^\[.+].+)[. ]+-[. ]+(\d{1,4})[. ]+(?=\W)", regex.IGNORECASE
-        ),
+        regex.compile(r"^\[.+].+[. ]+-[. ]+(\d{1,4})[. ]+(?=\W)", regex.IGNORECASE),
         array(integer),
         {"remove": True},
     )
     parser.add_handler(
         "episodes",
         regex.compile(
-            r"(?<!(?:seasons?|[Сс]езони?)\W*)(?:[ .([-]|^)(\d{1,3}(?:[ .]?[,&+~][ .]?\d{1,3})+)(?:[ .)\]-]|$)",
+            r"(?<!season)(?<!seasons)(?<!сезон)(?<!Сезон)(?:[ .([-]|^)(\d{1,3}(?:[ .]?[,&+~][ .]?\d{1,3})+)(?:[ .)\]-]|$)",
             regex.IGNORECASE,
         ),
         range_func,
@@ -1607,7 +1607,7 @@ def add_defaults(parser: Parser):
     parser.add_handler(
         "episodes",
         regex.compile(
-            r"(?<!(?:seasons?|[Сс]езони?)\W*)(?:[ .([-]|^)(\d{1,3}(?:-\d{1,3})+)(?:[ .)(\]]|-\D|$)",
+            r"(?<!season)(?<!seasons)(?<!сезон)(?<!Сезон)(?:[ .([-]|^)(\d{1,3}(?:-\d{1,3})+)(?:[ .)(\]]|-\D|$)",
             regex.IGNORECASE,
         ),
         range_func,
@@ -1664,7 +1664,7 @@ def add_defaults(parser: Parser):
     parser.add_handler(
         "episodes",
         regex.compile(
-            r"(?<=\D|^)(\d{1,3})[. ]?(?:of|из|iz)[. ]?\d{1,3}(?=\D|$)", regex.IGNORECASE
+            r"(?<!\d)(\d{1,3})[. ]?(?:of|из|iz)[. ]?\d{1,3}(?!\d)", regex.IGNORECASE
         ),
         array(integer),
     )
@@ -1751,7 +1751,7 @@ def add_defaults(parser: Parser):
             middle_title = title[start_index:end_index]
 
             beginning_pattern = regex.compile(
-                r"(?<!movie\W*|film\W*|^)(?:[ .]+-[ .]+|[([][ .]*)(\d{1,4})(?:a|b|v\d|\.\d)?(?:\W|$)(?!movie|film|\d+)(?<!\[(?:480|720|1080)\])",
+                r"(?<!movie)(?<!film)(?:[ .]+-[ .]+|[([][ .]*)(\d{1,4})(?:a|b|v\d|\.\d)?(?:\W|$)(?!movie|film|\d+)(?<!\[480\])(?<!\[720\])(?<!\[1080)",
                 regex.IGNORECASE,
             )
             middle_pattern = regex.compile(
@@ -1890,7 +1890,7 @@ def add_defaults(parser: Parser):
     )
     parser.add_handler(
         "languages",
-        regex.compile(r"(?<!shang-?)\bCH(?:I|T)\b", regex.IGNORECASE),
+        regex.compile(r"(?<!shang-)(?<!shang)\bCH(?:I|T)\b", regex.IGNORECASE),
         uniq_concat(value("zh")),
         {"skipFromTitle": True, "skipIfAlreadyFound": False},
     )
@@ -1973,14 +1973,14 @@ def add_defaults(parser: Parser):
     )
     parser.add_handler(
         "languages",
-        regex.compile(r"\b(?<=[ .,/-]+(?:[A-Z]{2}[ .,/-]+){2,})es\b", regex.IGNORECASE),
+        regex.compile(r"(?:[ .,/-]+[A-Z]{2}){2,}[ .,/-]+\bes\b", regex.IGNORECASE),
         uniq_concat(value("es")),
         {"skipFromTitle": True, "skipIfAlreadyFound": False},
     )
     parser.add_handler(
         "languages",
         regex.compile(
-            r"\b(?<=[ .,/-]+[A-Z]{2}[ .,/-]+)es(?=[ .,/-]+[A-Z]{2}[ .,/-]+)\b",
+            r"(?:[ .,/-]+[A-Z]{2}[ .,/-]+)\bes\b(?=[ .,/-]+[A-Z]{2}[ .,/-]+)",
             regex.IGNORECASE,
         ),
         uniq_concat(value("es")),
@@ -2075,7 +2075,7 @@ def add_defaults(parser: Parser):
     )
     parser.add_handler(
         "languages",
-        regex.compile(r"\b(?<!w{3}\.\w+\.)IT(?=[ .,/-]+(?:[a-zA-Z]{2}[ .,/-]+){2,})\b"),
+        regex.compile(r"\bIT(?=[ .,/-]+(?:[a-zA-Z]{2}[ .,/-]+){2,})\b"),
         uniq_concat(value("it")),
         {"skipFromTitle": True, "skipIfAlreadyFound": False},
     )
@@ -2114,14 +2114,14 @@ def add_defaults(parser: Parser):
     )
     parser.add_handler(
         "languages",
-        regex.compile(r"\b(?<=[ .,/-]+(?:[A-Z]{2}[ .,/-]+){2,})de\b", regex.IGNORECASE),
+        regex.compile(r"(?:[ .,/-]+[A-Z]{2}){2,}[ .,/-]+\bde\b", regex.IGNORECASE),
         uniq_concat(value("de")),
         {"skipFromTitle": True, "skipIfAlreadyFound": False},
     )
     parser.add_handler(
         "languages",
         regex.compile(
-            r"\b(?<=[ .,/-]+[A-Z]{2}[ .,/-]+)de(?=[ .,/-]+[A-Z]{2}[ .,/-]+)\b",
+            r"(?:[ .,/-]+[A-Z]{2}[ .,/-]+)\bde\b(?=[ .,/-]+[A-Z]{2}[ .,/-]+)",
             regex.IGNORECASE,
         ),
         uniq_concat(value("de")),
@@ -2171,9 +2171,7 @@ def add_defaults(parser: Parser):
     )
     parser.add_handler(
         "languages",
-        regex.compile(
-            r"\b(?:(?<!w{3}\.\w+\.)tel(?!\W*aviv)|telugu)\b", regex.IGNORECASE
-        ),
+        regex.compile(r"\b(?:tel(?!\W*aviv)|telugu)\b", regex.IGNORECASE),
         uniq_concat(value("te")),
         {"remove": True, "skipIfAlreadyFound": False},
     )
@@ -2185,48 +2183,38 @@ def add_defaults(parser: Parser):
     )
     parser.add_handler(
         "languages",
-        regex.compile(
-            r"\b(?:(?<!w{3}\.\w+\.)MAL(?:ay)?|malayalam)\b", regex.IGNORECASE
-        ),
+        regex.compile(r"\b(?:MAL(?:ay)?|malayalam)\b", regex.IGNORECASE),
         uniq_concat(value("ml")),
         {"remove": True, "skipIfFirst": True, "skipIfAlreadyFound": False},
     )
     parser.add_handler(
         "languages",
-        regex.compile(
-            r"\b(?:(?<!w{3}\.\w+\.)KAN(?:nada)?|kannada)\b", regex.IGNORECASE
-        ),
+        regex.compile(r"\b(?:KAN(?:nada)?|kannada)\b", regex.IGNORECASE),
         uniq_concat(value("kn")),
         {"remove": True, "skipIfAlreadyFound": False},
     )
     parser.add_handler(
         "languages",
-        regex.compile(
-            r"\b(?:(?<!w{3}\.\w+\.)MAR(?:a(?:thi)?)?|marathi)\b", regex.IGNORECASE
-        ),
+        regex.compile(r"\b(?:MAR(?:a(?:thi)?)?|marathi)\b", regex.IGNORECASE),
         uniq_concat(value("mr")),
         {"skipIfAlreadyFound": False},
     )
     parser.add_handler(
         "languages",
-        regex.compile(
-            r"\b(?:(?<!w{3}\.\w+\.)GUJ(?:arati)?|gujarati)\b", regex.IGNORECASE
-        ),
+        regex.compile(r"\b(?:GUJ(?:arati)?|gujarati)\b", regex.IGNORECASE),
         uniq_concat(value("gu")),
         {"skipIfAlreadyFound": False},
     )
     parser.add_handler(
         "languages",
-        regex.compile(
-            r"\b(?:(?<!w{3}\.\w+\.)PUN(?:jabi)?|punjabi)\b", regex.IGNORECASE
-        ),
+        regex.compile(r"\b(?:PUN(?:jabi)?|punjabi)\b", regex.IGNORECASE),
         uniq_concat(value("pa")),
         {"skipIfAlreadyFound": False},
     )
     parser.add_handler(
         "languages",
         regex.compile(
-            r"\b(?:(?<!w{3}\.\w+\.)BEN(?!.\bThe|and|of\b)(?:gali)?|bengali)\b",
+            r"\b(?:BEN(?!\w)(?!.?\bThe\b|.?and|.?of\b)(?:gali)?|bengali)\b",
             regex.IGNORECASE,
         ),
         uniq_concat(value("bn")),
@@ -2258,7 +2246,7 @@ def add_defaults(parser: Parser):
     )
     parser.add_handler(
         "languages",
-        regex.compile(r"\b(?:(?<!w{3}\.\w+\.)PL|pol)\b", regex.IGNORECASE),
+        regex.compile(r"\b(?:PL|pol)\b", regex.IGNORECASE),
         uniq_concat(value("pl")),
         {"skipIfAlreadyFound": False},
     )
@@ -2352,7 +2340,7 @@ def add_defaults(parser: Parser):
     )
     parser.add_handler(
         "languages",
-        regex.compile(r"\b(?:(?<!w{3}\.\w+\.)NL|dut|holand[eê]s)\b", regex.IGNORECASE),
+        regex.compile(r"\b(?:NL|dut|holand[eê]s)\b", regex.IGNORECASE),
         uniq_concat(value("nl")),
         {"skipIfAlreadyFound": False},
     )
@@ -2388,9 +2376,7 @@ def add_defaults(parser: Parser):
     )
     parser.add_handler(
         "languages",
-        regex.compile(
-            r"\b(?:(?<!w{3}\.\w+\.|Sci-)FI|finsk|finsub|nordic)\b", regex.IGNORECASE
-        ),
+        regex.compile(r"\b(?:(?<!Sci-)FI|finsk|finsub|nordic)\b", regex.IGNORECASE),
         uniq_concat(value("fi")),
         {"skipIfAlreadyFound": False},
     )
@@ -2403,7 +2389,7 @@ def add_defaults(parser: Parser):
     parser.add_handler(
         "languages",
         regex.compile(
-            r"\b(?:(?<!w{3}\.\w+\.)SE|swe|swesubs?|sv(?:ensk)?|nordic)\b",
+            r"\b(?:SE|swe|swesubs?|sv(?:ensk)?|nordic)\b",
             regex.IGNORECASE,
         ),
         uniq_concat(value("sv")),
@@ -2491,7 +2477,7 @@ def add_defaults(parser: Parser):
     parser.add_handler(
         "languages",
         regex.compile(
-            r"\b(?:malay|may(?=[\]_)]?\.\w{2,4}$)|(?<=subs?\([a-z,]+)may)\b",
+            r"\b(?:malay|may(?=[\]_)]?\.\w{2,4}$)|subs?\([a-z,]*may)\b",
             regex.IGNORECASE,
         ),
         uniq_concat(value("ms")),
