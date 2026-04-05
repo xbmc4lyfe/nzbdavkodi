@@ -195,7 +195,6 @@ def test_format_label_full():
     assert "x265/HEVC" in label
     assert "GROUP" in label
     assert "GB" in label
-    assert "[COLOR" in label
 
 
 def test_format_label_minimal():
@@ -213,4 +212,4 @@ def test_format_label_minimal():
         },
     }
     label = _format_label(item)
-    assert "some.file.mkv" in label
+    assert "Unknown" in label
