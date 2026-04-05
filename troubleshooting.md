@@ -125,5 +125,5 @@ Using IMDB suggestion API (`v2.sg.media-imdb.com/suggestion/t/{imdb_id}.json`) t
 - Kodi 21.3 (Omega) on macOS ARM 64-bit
 - Skin: Arctic Zephyr Mod
 - Python: 3.x (exact version in Kodi TBD)
-- nzbdav at <redacted-ip>:3333
-- NZBHydra2 at <redacted-ip>:5076
+- nzbdav at <local-ip>:3333
+- NZBHydra2 at <local-ip>:5076
