@@ -1,6 +1,6 @@
 """Shared HTTP and Kodi utility functions."""
 
-from urllib.request import urlopen, Request
+from urllib.request import Request, urlopen
 
 
 def http_get(url, timeout=15):

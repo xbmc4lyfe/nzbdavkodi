@@ -1,11 +1,12 @@
 """NZBHydra2 Newznab API client."""
 
 import xml.etree.ElementTree as ET
-from urllib.parse import urlencode
 from urllib.error import URLError
+from urllib.parse import urlencode
+
+import xbmc
 
 from resources.lib.http_util import http_get as _http_get
-
 
 NEWZNAB_NS = "http://www.newznab.com/DTD/2010/feeds/attributes/"
 
@@ -36,7 +37,8 @@ def search_hydra(search_type, title, year="", imdb="", season="", episode=""):
     """
     try:
         base_url, api_key = _get_settings()
-    except Exception:
+    except Exception as e:
+        xbmc.log("NZB-DAV: Failed to read Hydra settings: {}".format(e), xbmc.LOGERROR)
         return []
 
     params = {"apikey": api_key, "o": "xml"}
@@ -56,20 +58,30 @@ def search_hydra(search_type, title, year="", imdb="", season="", episode=""):
             params["q"] = title
 
     url = "{}/api?{}".format(base_url, urlencode(params))
+    xbmc.log("NZB-DAV: Hydra search URL: {}".format(url), xbmc.LOGDEBUG)
 
     try:
         xml_text = _http_get(url)
-    except (URLError, Exception):
+    except (URLError, Exception) as e:
+        xbmc.log("NZB-DAV: Hydra search request failed: {}".format(e), xbmc.LOGERROR)
         return []
 
-    return parse_results(xml_text)
+    results = parse_results(xml_text)
+    xbmc.log(
+        "NZB-DAV: Hydra returned {} results for '{}'".format(len(results), title),
+        xbmc.LOGINFO,
+    )
+    return results
 
 
 def parse_results(xml_text):
     """Parse Newznab XML response into a list of result dicts."""
     try:
         root = ET.fromstring(xml_text)
-    except ET.ParseError:
+    except ET.ParseError as e:
+        xbmc.log(
+            "NZB-DAV: Failed to parse Hydra XML response: {}".format(e), xbmc.LOGERROR
+        )
         return []
 
     results = []
@@ -126,8 +138,8 @@ def _get_text(element, tag):
 
 def _calculate_age(pubdate_str):
     """Calculate human-readable age from an RFC 2822 date string."""
-    from email.utils import parsedate_to_datetime
     from datetime import datetime, timezone
+    from email.utils import parsedate_to_datetime
 
     try:
         pub = parsedate_to_datetime(pubdate_str)

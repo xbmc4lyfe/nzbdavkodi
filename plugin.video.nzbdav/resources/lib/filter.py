@@ -1,5 +1,7 @@
 """Result filtering and sorting using PTT for title parsing."""
 
+import xbmc
+
 _RESOLUTION_MAP = {
     "2160p": "2160p",
     "4K": "2160p",
@@ -274,6 +276,7 @@ def filter_results(results):
     """Apply all filters, sort, and truncate results."""
     settings = _get_filter_settings()
 
+    total_in = len(results)
     filtered = []
     for result in results:
         meta = parse_title_metadata(result["title"])
@@ -287,6 +290,10 @@ def filter_results(results):
     if max_results > 0:
         filtered = filtered[:max_results]
 
+    xbmc.log(
+        "NZB-DAV: Filtered {} -> {} results".format(total_in, len(filtered)),
+        xbmc.LOGDEBUG,
+    )
     return filtered
 
 

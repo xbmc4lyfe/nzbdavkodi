@@ -1,6 +1,8 @@
 """URL routing for plugin:// calls from Kodi / TMDBHelper."""
 
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import parse_qs, urlparse
+
+import xbmc
 
 
 def parse_route(url):
@@ -39,6 +41,8 @@ def route(argv):
     path = parse_route(base_url)
     params = parse_params(query_string)
 
+    xbmc.log("NZB-DAV: Routing path='{}' params={}".format(path, params), xbmc.LOGDEBUG)
+
     if path == "/search":
         _handle_search(handle, params)
     elif path == "/resolve":
@@ -56,8 +60,9 @@ def route(argv):
 def _handle_search(handle, params):
     """Search NZBHydra and present filtered results as a directory listing."""
     import xbmcplugin
-    from resources.lib.hydra import search_hydra
+
     from resources.lib.filter import filter_results
+    from resources.lib.hydra import search_hydra
 
     search_type = params.get("type", "movie")
     title = params.get("title", "")
@@ -83,9 +88,10 @@ def _handle_search(handle, params):
 
 def _display_results(handle, results):
     """Add filtered results to the Kodi directory listing."""
-    import xbmcplugin
-    import xbmcgui
     from urllib.parse import quote
+
+    import xbmcgui
+    import xbmcplugin
 
     for item in results:
         label = "{} | {} | {} | {}".format(
@@ -108,8 +114,8 @@ def _display_results(handle, results):
 
 def _handle_main_menu(handle):
     """Show main menu with settings and install player options."""
-    import xbmcplugin
     import xbmcgui
+    import xbmcplugin
 
     # Install Player item
     li = xbmcgui.ListItem(label="Install Player File")

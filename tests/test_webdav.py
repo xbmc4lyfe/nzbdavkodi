@@ -1,11 +1,11 @@
-from urllib.parse import unquote
 from unittest.mock import patch
+from urllib.parse import unquote
+
 from resources.lib.webdav import (
-    check_file_available,
     build_webdav_url,
+    check_file_available,
     get_webdav_stream_url,
 )
-
 
 _SETTINGS_WITH_AUTH = {
     "webdav_url": "http://webdav:8080",

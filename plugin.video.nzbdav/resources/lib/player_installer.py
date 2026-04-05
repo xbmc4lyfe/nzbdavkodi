@@ -3,11 +3,11 @@
 import json
 import os
 
+import xbmc
 import xbmcaddon
 import xbmcvfs
 
 from resources.lib.http_util import notify as _notify
-
 
 PLAYER_TARGETS = {
     "TMDBHelper": {
@@ -44,6 +44,10 @@ def get_install_targets():
     for name, config in PLAYER_TARGETS.items():
         if addon.getSetting(config["setting_id"]).lower() == "true":
             targets.append((name, config["path"]))
+    xbmc.log(
+        "NZB-DAV: Install targets selected: {}".format([t[0] for t in targets]),
+        xbmc.LOGINFO,
+    )
     return targets
 
 
@@ -51,6 +55,7 @@ def install_player():
     targets = get_install_targets()
 
     if not targets:
+        xbmc.log("NZB-DAV: No install targets selected", xbmc.LOGINFO)
         _notify("NZB-DAV", "No install targets selected. Check addon settings.")
         return
 
@@ -59,6 +64,9 @@ def install_player():
     failed = []
 
     for name, path in targets:
+        xbmc.log(
+            "NZB-DAV: Installing player to {} at {}".format(name, path), xbmc.LOGINFO
+        )
         try:
             real_path = xbmcvfs.translatePath(path)
             if not xbmcvfs.exists(real_path):
@@ -69,10 +77,18 @@ def install_player():
             try:
                 f.write(player_content)
                 succeeded.append(name)
+                xbmc.log(
+                    "NZB-DAV: Player installed successfully to {}".format(name),
+                    xbmc.LOGINFO,
+                )
             finally:
                 f.close()
-        except Exception:
+        except Exception as e:
             failed.append(name)
+            xbmc.log(
+                "NZB-DAV: Failed to install player to {}: {}".format(name, e),
+                xbmc.LOGERROR,
+            )
 
     if succeeded:
         _notify("NZB-DAV", "Player installed to: {}".format(", ".join(succeeded)))
