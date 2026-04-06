@@ -51,7 +51,15 @@ disable=
     # Unknown options across pylint versions (e.g. too-many-positional-arguments on 3.8)
     unknown-option-value,
     # Unused variable in unpacking
-    unused-variable
+    unused-variable,
+    # Duplicate code between playback_monitor.py and service.py is intentional
+    duplicate-code,
+    # subprocess.Popen can't use `with` when we need the process handle for kill/wait
+    consider-using-with,
+    # Global singleton pattern for proxy instance
+    global-statement,
+    # arguments-differ used intentionally (log_message override)
+    arguments-differ
 
 [FORMAT]
 max-line-length=120

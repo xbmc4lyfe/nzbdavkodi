@@ -44,6 +44,12 @@ def _find_ffmpeg():
     return None
 
 
+def _validate_url(url):
+    """Reject URLs with unexpected schemes to prevent command injection."""
+    if not url or not url.startswith(("http://", "https://")):
+        raise ValueError("Invalid URL scheme: {}".format(url[:30]))
+
+
 def _parse_ffmpeg_duration(stderr_text):
     """Parse 'Duration: HH:MM:SS.xx' from ffmpeg stderr output.
 
@@ -81,7 +87,7 @@ class _StreamHandler(BaseHTTPRequestHandler):
 
     protocol_version = "HTTP/1.1"
 
-    def log_message(self, fmt, *args):  # pylint: disable=arguments-renamed
+    def log_message(self, fmt, *args):  # pylint: disable=arguments-differ
         xbmc.log("NZB-DAV: Proxy: {}".format(fmt % args), xbmc.LOGDEBUG)
 
     def do_POST(self):
@@ -95,7 +101,7 @@ class _StreamHandler(BaseHTTPRequestHandler):
         body = self.rfile.read(length) if length else b""
         try:
             data = json.loads(body)
-        except Exception:
+        except (ValueError, KeyError):
             self.send_error(400)
             return
 
@@ -116,6 +122,7 @@ class _StreamHandler(BaseHTTPRequestHandler):
         self.wfile.write(resp)
 
     def do_HEAD(self):
+        """Respond to HEAD with content metadata (type, length, ranges)."""
         ctx = self.server.stream_context
         if ctx is None:
             self.send_error(404)
@@ -139,6 +146,7 @@ class _StreamHandler(BaseHTTPRequestHandler):
             self.end_headers()
 
     def do_GET(self):
+        """Serve the stream via remux (MP4) or direct proxy (MKV etc.)."""
         ctx = self.server.stream_context
         if ctx is None:
             self.send_error(404)
@@ -149,10 +157,12 @@ class _StreamHandler(BaseHTTPRequestHandler):
         else:
             self._serve_proxy(ctx)
 
-    def _build_ffmpeg_cmd(self, ctx, seek_seconds=None):
+    @staticmethod
+    def _build_ffmpeg_cmd(ctx, seek_seconds=None):
         """Build the ffmpeg remux command list."""
         ffmpeg = ctx["ffmpeg_path"]
         input_url = ctx["remote_url"]
+        _validate_url(input_url)
         if ctx.get("auth_header"):
             auth = ctx["auth_header"]
             if auth.startswith("Basic "):
@@ -193,7 +203,7 @@ class _StreamHandler(BaseHTTPRequestHandler):
             convert_subs = xbmcaddon.Addon().getSetting("proxy_convert_subs")
             if convert_subs != "false":
                 cmd.extend(["-map", "0:s?", "-c:s", "srt"])
-        except Exception:
+        except Exception:  # noqa: BLE001 — Kodi module may not exist
             pass  # outside Kodi context (tests), skip subtitle setting
 
         cmd.extend(
@@ -225,11 +235,12 @@ class _StreamHandler(BaseHTTPRequestHandler):
         seek_seconds = None
         with self.server.ffmpeg_lock:
             current_pos = self.server.current_byte_pos
-            if (
+            is_seek = (
                 seekable
                 and requested_start > 0
                 and _is_seek_request(current_pos, requested_start)
-            ):
+            )
+            if is_seek:
                 seek_seconds = (requested_start / total_bytes) * duration
                 xbmc.log(
                     "NZB-DAV: Seek to byte {} -> {:.1f}s".format(
@@ -253,8 +264,10 @@ class _StreamHandler(BaseHTTPRequestHandler):
         )
 
         try:
-            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        except Exception as e:
+            proc = subprocess.Popen(
+                cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=False
+            )
+        except OSError as e:
             xbmc.log("NZB-DAV: Failed to start ffmpeg: {}".format(e), xbmc.LOGERROR)
             self.send_error(500)
             return
@@ -328,7 +341,7 @@ class _StreamHandler(BaseHTTPRequestHandler):
             if ctx.get("auth_header"):
                 req.add_header("Authorization", ctx["auth_header"])
 
-            with urlopen(req, timeout=120) as resp:
+            with urlopen(req, timeout=120) as resp:  # nosec B310
                 self.send_response(206)
                 self.send_header("Content-Type", ctx["content_type"])
                 self.send_header("Content-Length", str(end - start + 1))
@@ -347,10 +360,11 @@ class _StreamHandler(BaseHTTPRequestHandler):
                     self.wfile.write(chunk)
         except (BrokenPipeError, ConnectionResetError):
             pass
-        except Exception as e:
+        except (OSError, ValueError) as e:
             xbmc.log("NZB-DAV: Proxy range failed: {}".format(e), xbmc.LOGERROR)
 
-    def _parse_range(self, range_header, content_length):
+    @staticmethod
+    def _parse_range(range_header, content_length):
         """Parse Range header, return (start, end) or (None, None)."""
         try:
             range_spec = range_header.replace("bytes=", "")
@@ -370,6 +384,14 @@ class _ThreadedHTTPServer(_ThreadingMixIn, HTTPServer):
 
     allow_reuse_address = True
     daemon_threads = True
+
+    def __init__(self, *args, **kwargs):
+        self.stream_context = None
+        self.active_ffmpeg = None
+        self.current_byte_pos = 0
+        self.ffmpeg_lock = threading.Lock()
+        self.owner_proxy = None
+        super().__init__(*args, **kwargs)
 
 
 class StreamProxy:
@@ -455,8 +477,10 @@ class StreamProxy:
         )
         return local_url
 
-    def _probe_duration(self, ffmpeg_path, url, auth_header):
+    @staticmethod
+    def _probe_duration(ffmpeg_path, url, auth_header):
         """Probe file duration using ffmpeg. Returns seconds or None."""
+        _validate_url(url)
         input_url = url
         if auth_header and auth_header.startswith("Basic "):
             import base64
@@ -469,6 +493,7 @@ class StreamProxy:
                 [ffmpeg_path, "-v", "warning", "-i", input_url, "-f", "null", "-"],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
+                shell=False,
             )
             # Read stderr line-by-line; Duration appears in the header.
             # Kill ffmpeg as soon as we have it to avoid reading the whole file.
@@ -482,32 +507,34 @@ class StreamProxy:
                     return result
             proc.wait(timeout=30)
             return _parse_ffmpeg_duration(collected)
-        except Exception as e:
+        except (OSError, subprocess.SubprocessError, ValueError) as e:
             xbmc.log("NZB-DAV: Duration probe failed: {}".format(e), xbmc.LOGWARNING)
             return None
 
-    def _get_content_length(self, url, auth_header):
+    @staticmethod
+    def _get_content_length(url, auth_header):
         """Get file size via HEAD or range probe."""
         req = Request(url, method="HEAD")
         if auth_header:
             req.add_header("Authorization", auth_header)
         try:
-            with urlopen(req, timeout=10) as resp:
+            with urlopen(req, timeout=10) as resp:  # nosec B310
                 return int(resp.headers.get("Content-Length", 0))
-        except Exception:
+        except (OSError, ValueError):
             pass
         try:
             req = Request(url)
             req.add_header("Range", "bytes=-1")
             if auth_header:
                 req.add_header("Authorization", auth_header)
-            with urlopen(req, timeout=10) as resp:
+            with urlopen(req, timeout=10) as resp:  # nosec B310
                 cr = resp.headers.get("Content-Range", "")
                 return int(cr.split("/")[1]) if "/" in cr else 0
-        except Exception:
+        except (OSError, ValueError):
             return 0
 
-    def _detect_content_type(self, url):
+    @staticmethod
+    def _detect_content_type(url):
         """Detect content type from URL extension."""
         lower = url.lower()
         if lower.endswith(".mkv"):
@@ -527,7 +554,7 @@ def get_service_proxy_port():
         home = xbmcgui.Window(10000)
         port_str = home.getProperty("nzbdav.proxy_port")
         return int(port_str) if port_str else 0
-    except Exception:
+    except Exception:  # noqa: BLE001 — Kodi module may not exist
         return 0
 
 
@@ -539,14 +566,14 @@ def prepare_stream_via_service(port, remote_url, auth_header=None):
     data = json.dumps({"remote_url": remote_url, "auth_header": auth_header})
     req = Request(url, data=data.encode(), method="POST")
     req.add_header("Content-Type", "application/json")
-    with urlopen(req, timeout=60) as resp:
+    with urlopen(req, timeout=60) as resp:  # nosec B310
         result = json.loads(resp.read())
         return result["proxy_url"]
 
 
 def get_proxy():
     """Get or create the singleton stream proxy."""
-    global _proxy  # pylint: disable=global-statement
+    global _proxy
     with _proxy_lock:
         if _proxy is None:
             _proxy = StreamProxy()
