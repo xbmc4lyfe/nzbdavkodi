@@ -41,15 +41,57 @@ No separate SABnzbd needed -- nzbdav handles both downloading and serving.
 
 Install through the NZB-DAV repository for automatic updates:
 
-1. Download `repository.nzbdav.zip` from the [releases page](../../releases) or [GitHub Pages](https://xbmc4lyfe.github.io/nzbdavkodi/repository.nzbdav/repository.nzbdav.zip)
-2. In Kodi: **Settings > Add-ons > Install from zip file** > select `repository.nzbdav.zip`
+1. In Kodi: **Settings > File Manager > Add source** > enter `https://xbmc4lyfe.github.io/nzbdavkodi/` > name it `nzbdav`
+2. **Settings > Add-ons > Install from zip file** > `nzbdav` > `repository.nzbdav` > `repository.nzbdav-1.0.0.zip`
 3. **Settings > Add-ons > Install from repository > NZB-DAV Repository > Video add-ons > NZB-DAV**
 4. Future updates are installed automatically
 
 ### Manual Install
 
-1. Download `plugin.video.nzbdav.zip` from the [releases page](../../releases)
+1. Download the addon zip from the [releases page](../../releases)
 2. In Kodi: **Settings > Add-ons > Install from zip file** > select `plugin.video.nzbdav.zip`
+
+---
+
+## TMDBHelper Setup
+
+NZB-DAV works as a player for TMDBHelper, which provides the movie/TV browsing interface. If you don't have TMDBHelper installed yet:
+
+### 1. Install TMDBHelper
+
+TMDBHelper is available from the official Kodi repository:
+
+1. **Settings > Add-ons > Install from repository > Kodi Add-on repository > Video add-ons > TheMovieDb Helper**
+2. Click **Install** and wait for the notification
+
+If it's not in the official repo for your Kodi version, install from the [TMDBHelper GitHub releases](https://github.com/jurialmunkey/plugin.video.themoviedb.helper/releases):
+
+1. Download the latest `plugin.video.themoviedb.helper` zip
+2. **Settings > Add-ons > Install from zip file** > select the downloaded zip
+
+### 2. Configure TMDBHelper
+
+1. Open TMDBHelper settings: **Add-ons > My add-ons > Video add-ons > TheMovieDb Helper > Configure**
+2. Under **API Keys**, enter a [TMDB API key](https://www.themoviedb.org/settings/api) (free account required)
+3. Under **Players**, set **Default player** to **NZB-DAV** for both Movies and TV Shows
+
+### 3. Install the NZB-DAV Player File
+
+The player file tells TMDBHelper how to call NZB-DAV:
+
+1. Open NZB-DAV settings: **Add-ons > My add-ons > Video add-ons > NZB-DAV > Configure**
+2. Click **Install Player File** and select **TMDBHelper** from the list
+3. Restart Kodi (or go to TMDBHelper settings > **Players** > **Update players**)
+
+### 4. Set NZB-DAV as the Default Player
+
+1. Open TMDBHelper settings > **Players**
+2. Set **Default player (Movies)** to **NZB-DAV**
+3. Set **Default player (TV Shows)** to **NZB-DAV**
+
+With this configured, selecting any movie or episode in TMDBHelper will automatically search and stream via NZB-DAV without a player selection prompt.
+
+> **Tip:** If you want to keep multiple players available (e.g., NZB-DAV + a Debrid service), leave the default player as **Choose** and you'll get a player selection dialog each time.
 
 ---
 
@@ -57,17 +99,21 @@ Install through the NZB-DAV repository for automatic updates:
 
 Open the addon settings (**Add-ons > My add-ons > Video add-ons > NZB-DAV > Configure**):
 
+![NZB-DAV Settings](docs/images/settings.png)
+
 ### Connection Settings
 
-| Setting | Description |
-|---------|-------------|
+| Setting | Where to find it |
+|---------|-----------------|
 | NZBHydra2 URL | URL to your NZBHydra2 instance (e.g., `http://192.168.1.100:5076`) |
-| NZBHydra2 API Key | API key from NZBHydra2's config |
-| nzbdav URL | URL to your nzbdav instance (e.g., `http://192.168.1.100:3000`) |
-| nzbdav API Key | API key from nzbdav's config |
+| NZBHydra2 API Key | NZBHydra2 web UI > `http://<hydra>:5076/config/main` > **Security** section > **API key** |
+| nzbdav URL | URL to your nzbdav instance (e.g., `http://192.168.1.100:3333`) |
+| nzbdav API Key | nzbdav web UI > `http://<nzbdav>/settings` > **Usenet** tab > **API Key** |
 | WebDAV URL | Leave empty to use nzbdav URL, or set a different URL if WebDAV is on a separate port |
-| WebDAV Username | Username for WebDAV authentication |
-| WebDAV Password | Password for WebDAV authentication |
+| WebDAV Username | nzbdav web UI > `http://<nzbdav>/settings` > **WebDAV** tab > **Username** |
+| WebDAV Password | nzbdav web UI > `http://<nzbdav>/settings` > **WebDAV** tab > **Password** |
+
+> **Tip for entering long API keys:** Use a Kodi remote app with keyboard support (e.g., Sybu on iPhone). Navigate to the nzbdav/NZBHydra2 settings page on your computer, copy the key, then paste from your clipboard into the Kodi input field via the remote app's on-screen keyboard.
 
 ### Player Installation
 
@@ -159,7 +205,7 @@ With **Auto-select best match** enabled, step 3 is skipped automatically.
 ### Commands
 
 ```bash
-just test          # Run all 132 tests
+just test          # Run all 223 tests
 just test-verbose  # Run tests with full output
 just lint          # Check ruff + black formatting
 just lint-fix      # Auto-fix lint issues
@@ -187,6 +233,7 @@ plugin.video.nzbdav/
       filter.py          # Result filtering with PTT
       results_dialog.py  # Custom full-screen results dialog
       resolver.py        # Download + polling orchestrator
+      stream_proxy.py    # Local HTTP proxy with MP4 faststart
       cache.py           # JSON-based search result cache
       player_installer.py # Player JSON installer
       http_util.py       # Shared HTTP utilities
@@ -205,14 +252,14 @@ repo/
   release.yml            # Build + deploy on version tags
 tests/
   conftest.py            # Kodi module mocks
-  test_*.py              # 132 tests
+  test_*.py              # 223 tests
 ```
 
 ### Releasing
 
 1. Bump `version` in `plugin.video.nzbdav/addon.xml`
-2. Commit: `git commit -am "release: v0.2.0"`
-3. Tag and push: `git tag v0.2.0 && git push origin main v0.2.0`
+2. Commit: `git commit -am "release: v0.X.0"`
+3. Tag and push: `git tag v0.X.0 && git push origin main v0.X.0`
 4. GitHub Actions builds the zip, creates a GitHub Release, and updates the Kodi repo on GitHub Pages
 5. Kodi picks up the update automatically via the repository
 

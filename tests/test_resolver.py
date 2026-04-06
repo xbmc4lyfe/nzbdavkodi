@@ -53,6 +53,7 @@ def test_storage_to_webdav_path_trailing_slash():
 # --- resolve() tests ---
 
 
+@patch("resources.lib.stream_proxy.get_service_proxy_port", return_value=0)
 @patch("resources.lib.stream_proxy.get_proxy")
 @patch("resources.lib.resolver.xbmc")
 @patch("resources.lib.resolver.xbmcgui")
@@ -62,7 +63,7 @@ def test_storage_to_webdav_path_trailing_slash():
 @patch("resources.lib.resolver.get_job_status")
 @patch("resources.lib.resolver.submit_nzb")
 @patch("resources.lib.resolver.get_webdav_stream_url_for_path")
-@patch("resources.lib.resolver.validate_stream")
+@patch("resources.lib.resolver._validate_stream_url")
 @patch("resources.lib.resolver._get_poll_settings")
 def test_resolve_success(
     mock_poll,
@@ -76,6 +77,7 @@ def test_resolve_success(
     mock_gui,
     mock_xbmc,
     mock_get_proxy,
+    mock_service_port,
 ):
     mock_poll.return_value = (2, 60)
     mock_submit.return_value = "SABnzbd_nzo_abc123"
@@ -103,11 +105,9 @@ def test_resolve_success(
     resolve(1, {"nzburl": "http://hydra/getnzb/abc", "title": "movie.mkv"})
 
     mock_submit.assert_called_once()
-    # All formats go through proxy — setResolvedUrl(False) + Player().play()
     mock_plugin.setResolvedUrl.assert_called_once()
     resolve_call = mock_plugin.setResolvedUrl.call_args
-    assert resolve_call[0][1] is False
-    mock_xbmc.Player.return_value.play.assert_called_once()
+    assert resolve_call[0][1] is True
 
 
 @patch("resources.lib.resolver.find_completed_by_name")
@@ -297,7 +297,7 @@ def test_resolve_deleted_status(
 @patch("resources.lib.resolver.get_job_status")
 @patch("resources.lib.resolver.submit_nzb")
 @patch("resources.lib.resolver.get_webdav_stream_url_for_path")
-@patch("resources.lib.resolver.validate_stream")
+@patch("resources.lib.resolver._validate_stream_url")
 @patch("resources.lib.resolver._get_poll_settings")
 def test_resolve_url_encoded_special_characters(
     mock_poll,
@@ -385,6 +385,7 @@ def test_resolve_poll_interval_respected(
     monitor.waitForAbort.assert_called_with(poll_interval)
 
 
+@patch("resources.lib.stream_proxy.get_service_proxy_port", return_value=0)
 @patch("resources.lib.stream_proxy.get_proxy")
 @patch("resources.lib.resolver.xbmc")
 @patch("resources.lib.resolver.xbmcgui")
@@ -394,7 +395,7 @@ def test_resolve_poll_interval_respected(
 @patch("resources.lib.resolver.get_job_status")
 @patch("resources.lib.resolver.submit_nzb")
 @patch("resources.lib.resolver.get_webdav_stream_url_for_path")
-@patch("resources.lib.resolver.validate_stream")
+@patch("resources.lib.resolver._validate_stream_url")
 @patch("resources.lib.resolver._get_poll_settings")
 def test_resolve_status_transitions_queued_to_downloading_to_completed(
     mock_poll,
@@ -408,6 +409,7 @@ def test_resolve_status_transitions_queued_to_downloading_to_completed(
     mock_gui,
     mock_xbmc,
     mock_get_proxy,
+    mock_service_port,
 ):
     """resolve() handles Queued -> Downloading -> Completed via history."""
     mock_poll.return_value = (1, 3600)
@@ -447,11 +449,9 @@ def test_resolve_status_transitions_queued_to_downloading_to_completed(
     assert (
         mock_history.call_count == 3
     ), "get_job_history should be polled three times before completing"
-    # All formats go through proxy — setResolvedUrl(False) + Player().play()
     mock_plugin.setResolvedUrl.assert_called_once()
     resolve_call = mock_plugin.setResolvedUrl.call_args
-    assert resolve_call[0][1] is False
-    mock_xbmc.Player.return_value.play.assert_called_once()
+    assert resolve_call[0][1] is True
 
 
 @patch("resources.lib.resolver.find_completed_by_name")
@@ -524,7 +524,7 @@ def test_resolve_max_iterations_safeguard(
 @patch("resources.lib.resolver.get_job_status")
 @patch("resources.lib.resolver.submit_nzb")
 @patch("resources.lib.resolver.get_webdav_stream_url_for_path")
-@patch("resources.lib.resolver.validate_stream")
+@patch("resources.lib.resolver._validate_stream_url")
 @patch("resources.lib.resolver._get_poll_settings")
 def test_resolve_retries_submit_on_transient_failure(
     mock_poll,
