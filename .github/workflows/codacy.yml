@@ -55,12 +55,15 @@ jobs:
                       for loc in r.get('locations', [])
                   )
               ]
+          # Ensure at least one run with results exists (upload-sarif rejects empty)
+          if not sarif.get('runs'):
+              sarif['runs'] = [{'tool': {'driver': {'name': 'codacy'}}, 'results': []}]
           with open('filtered.sarif', 'w') as f:
               json.dump(sarif, f)
           "
 
       - name: Upload SARIF results file
-        uses: github/codeql-action/upload-sarif@d4b3ca9fa7f69d38bfcd667bdc45bc373d16277e # v4
+        uses: github/codeql-action/upload-sarif@c10b8064de6f491fea524254123dbe5e09572f13 # v4
         with:
           sarif_file: filtered.sarif
         if: always()
