@@ -6,6 +6,7 @@ from unittest.mock import patch
 from resources.lib.filter import (
     _sort_results,
     filter_results,
+    matches_filters,
     parse_title_metadata,
 )
 
@@ -133,7 +134,7 @@ def test_filter_pipeline_realistic_titles(mock_settings):
         _make_result("The.Matrix.1999.CAM.x264-JUNK"),
         _make_result("The.Matrix.1999.720p.WEB-DL.x264-GRP"),
     ]
-    filtered = filter_results(results)
+    filtered, _ = filter_results(results)
     # Should keep only the 1080p x264 FGT release (YIFY excluded, CAM excluded,
     # 2160p excluded by resolution, 720p excluded by resolution)
     assert len(filtered) == 1
@@ -143,7 +144,7 @@ def test_filter_pipeline_realistic_titles(mock_settings):
 @patch("resources.lib.filter._get_filter_settings")
 def test_filter_pipeline_empty_results(mock_settings):
     mock_settings.return_value = _all_pass_settings()
-    filtered = filter_results([])
+    filtered, _ = filter_results([])
     assert filtered == []
 
 
@@ -168,7 +169,7 @@ def test_filter_pipeline_all_filtered_out(mock_settings):
         _make_result("Movie.2024.2160p.BluRay.HEVC-GRP"),
         _make_result("Movie.2024.1080p.BluRay.x264-GRP"),
     ]
-    filtered = filter_results(results)
+    filtered, _ = filter_results(results)
     assert len(filtered) == 0
 
 
@@ -197,7 +198,7 @@ def test_filter_excludes_resolution(mock_settings):
         _make_result("Movie.2024.1080p.BluRay.x264-GRP"),
         _make_result("Movie.2024.720p.WEB-DL.x264-GRP"),
     ]
-    filtered = filter_results(results)
+    filtered, _ = filter_results(results)
     assert len(filtered) == 1
     assert "1080p" in filtered[0]["title"]
 
@@ -223,7 +224,7 @@ def test_filter_excludes_keywords(mock_settings):
         _make_result("Movie.2024.CAM.x264-GRP"),
         _make_result("Movie.2024.1080p.BluRay.x264-GRP"),
     ]
-    filtered = filter_results(results)
+    filtered, _ = filter_results(results)
     assert len(filtered) == 1
     assert "BluRay" in filtered[0]["title"]
 
@@ -250,7 +251,7 @@ def test_filter_size_range(mock_settings):
         _make_result("Good.Movie-GRP", size="5000000000"),
         _make_result("Huge.Movie-GRP", size="50000000000"),
     ]
-    filtered = filter_results(results)
+    filtered, _ = filter_results(results)
     assert len(filtered) == 1
     assert "Good" in filtered[0]["title"]
 
@@ -273,7 +274,7 @@ def test_filter_max_results(mock_settings):
         "max_results": 2,
     }
     results = [_make_result("Movie.{}.1080p-GRP".format(i)) for i in range(5)]
-    filtered = filter_results(results)
+    filtered, _ = filter_results(results)
     assert len(filtered) == 2
 
 
@@ -298,7 +299,7 @@ def test_filter_preferred_release_group_boosted(mock_settings):
         _make_result("Movie.2024.1080p.BluRay.x264-OTHER"),
         _make_result("Movie.2024.1080p.BluRay.x264-SPARKS"),
     ]
-    filtered = filter_results(results)
+    filtered, _ = filter_results(results)
     assert filtered[0]["title"].endswith("-SPARKS")
 
 
@@ -323,7 +324,7 @@ def test_filter_exclude_release_group(mock_settings):
         _make_result("Movie.2024.1080p.BluRay.x264-YIFY"),
         _make_result("Movie.2024.1080p.BluRay.x264-SPARKS"),
     ]
-    filtered = filter_results(results)
+    filtered, _ = filter_results(results)
     assert len(filtered) == 1
     assert "SPARKS" in filtered[0]["title"]
 
@@ -336,7 +337,7 @@ def test_filter_very_large_size(mock_settings):
     """100GB+ files should not overflow or crash."""
     mock_settings.return_value = _all_pass_settings()
     results = [_make_result("Movie.2024.2160p.REMUX-GRP", size="107374182400")]
-    filtered = filter_results(results)
+    filtered, _ = filter_results(results)
     assert len(filtered) == 1
 
 
@@ -345,7 +346,7 @@ def test_filter_zero_size(mock_settings):
     """Zero-size results should pass if no min_size set."""
     mock_settings.return_value = _all_pass_settings()
     results = [_make_result("Movie.2024.1080p-GRP", size="0")]
-    filtered = filter_results(results)
+    filtered, _ = filter_results(results)
     assert len(filtered) == 1
 
 
@@ -354,7 +355,7 @@ def test_filter_empty_size(mock_settings):
     """Empty size string should not crash."""
     mock_settings.return_value = _all_pass_settings()
     results = [_make_result("Movie.2024.1080p-GRP", size="")]
-    filtered = filter_results(results)
+    filtered, _ = filter_results(results)
     assert len(filtered) == 1
 
 
@@ -379,7 +380,7 @@ def test_filter_require_keywords(mock_settings):
         _make_result("Movie.2024.1080p.BluRay.REMUX.HEVC-GRP"),
         _make_result("Movie.2024.1080p.BluRay.x264-GRP"),
     ]
-    filtered = filter_results(results)
+    filtered, _ = filter_results(results)
     assert len(filtered) == 1
     assert "REMUX" in filtered[0]["title"]
 
@@ -468,7 +469,7 @@ def test_filter_tv_episode_title_with_season_episode(mock_settings):
         _make_result("Breaking.Bad.S05E14.Ozymandias.720p.WEB-DL.x264-GRP"),
         _make_result("Breaking.Bad.S05E14.Ozymandias.2160p.BluRay.HEVC-SPARKS"),
     ]
-    filtered = filter_results(results)
+    filtered, _ = filter_results(results)
     assert len(filtered) == 1, "Only the 1080p result should pass the resolution filter"
     assert "S05E14" in filtered[0]["title"], "Filtered result should be the TV episode"
     assert "1080p" in filtered[0]["title"]
@@ -482,7 +483,7 @@ def test_filter_no_resolution_detected_passes_when_all_enabled(mock_settings):
         _make_result("Some.Old.Movie.DVDRip.x264-GRP"),
         _make_result("Another.Release.HDTV.x264-GRP"),
     ]
-    filtered = filter_results(results)
+    filtered, _ = filter_results(results)
     assert (
         len(filtered) == 2
     ), "Results with no detected resolution should pass when all resolutions enabled"
@@ -516,7 +517,7 @@ def test_filter_combined_resolution_audio_codec(mock_settings):
         # wrong audio
         _make_result("Movie.2024.1080p.BluRay.HEVC.AAC-GRP"),
     ]
-    filtered = filter_results(results)
+    filtered, _ = filter_results(results)
     assert len(filtered) == 1, "Only the result matching all three filters should pass"
     assert "HEVC" in filtered[0]["title"], "Filtered result should contain HEVC"
     assert "DTS-HD" in filtered[0]["title"], "Filtered result should contain DTS-HD"
@@ -530,7 +531,7 @@ def test_filter_results_attaches_meta_key(mock_settings):
         _make_result("Movie.2024.1080p.BluRay.x264-GRP"),
         _make_result("Another.2023.2160p.UHD.BluRay.HEVC-SPARKS"),
     ]
-    filtered = filter_results(results)
+    filtered, _ = filter_results(results)
     assert len(filtered) == 2
     for item in filtered:
         assert "_meta" in item, "Each filtered result must have a _meta key"
@@ -540,3 +541,109 @@ def test_filter_results_attaches_meta_key(mock_settings):
         assert "audio" in meta, "_meta must contain audio list"
         assert "hdr" in meta, "_meta must contain hdr list"
         assert "group" in meta, "_meta must contain group"
+
+
+# --- Size parsing robustness tests ---
+
+
+def test_matches_filters_non_numeric_size():
+    """matches_filters should not crash on non-numeric size values."""
+    result = {
+        "title": "Movie.2024.1080p.BluRay.x264-GRP",
+        "size": "not-a-number",
+    }
+    meta = parse_title_metadata(result["title"])
+    settings = {
+        "resolutions": [],
+        "hdr": [],
+        "audio": [],
+        "codecs": [],
+        "languages": [],
+        "exclude_keywords": [],
+        "require_keywords": [],
+        "release_group": [],
+        "exclude_release_group": [],
+        "min_size": 100,
+        "max_size": 0,
+        "sort_order": 0,
+        "max_results": 25,
+    }
+    # Should not raise, should return False (can't meet min_size)
+    assert matches_filters(result, meta, settings) is False
+
+
+def test_matches_filters_empty_size():
+    """matches_filters should handle empty string size gracefully."""
+    result = {
+        "title": "Movie.2024.1080p.BluRay.x264-GRP",
+        "size": "",
+    }
+    meta = parse_title_metadata(result["title"])
+    settings = {
+        "resolutions": [],
+        "hdr": [],
+        "audio": [],
+        "codecs": [],
+        "languages": [],
+        "exclude_keywords": [],
+        "require_keywords": [],
+        "release_group": [],
+        "exclude_release_group": [],
+        "min_size": 0,
+        "max_size": 0,
+        "sort_order": 0,
+        "max_results": 25,
+    }
+    assert matches_filters(result, meta, settings) is True
+
+
+def test_matches_filters_none_size():
+    """matches_filters should handle None size gracefully."""
+    result = {
+        "title": "Movie.2024.1080p.BluRay.x264-GRP",
+        "size": None,
+    }
+    meta = parse_title_metadata(result["title"])
+    settings = {
+        "resolutions": [],
+        "hdr": [],
+        "audio": [],
+        "codecs": [],
+        "languages": [],
+        "exclude_keywords": [],
+        "require_keywords": [],
+        "release_group": [],
+        "exclude_release_group": [],
+        "min_size": 0,
+        "max_size": 0,
+        "sort_order": 0,
+        "max_results": 25,
+    }
+    assert matches_filters(result, meta, settings) is True
+
+
+@patch("resources.lib.filter._get_filter_settings")
+def test_filter_results_returns_all_parsed(mock_settings):
+    """filter_results should return (filtered, all_parsed) tuple."""
+    mock_settings.return_value = {
+        "resolutions": ["1080p"],
+        "hdr": [],
+        "audio": [],
+        "codecs": [],
+        "languages": [],
+        "exclude_keywords": [],
+        "require_keywords": [],
+        "release_group": [],
+        "exclude_release_group": [],
+        "min_size": 0,
+        "max_size": 0,
+        "sort_order": 0,
+        "max_results": 25,
+    }
+    results = [
+        {"title": "Movie.2024.1080p.BluRay.x264-GRP", "size": "5000000000"},
+        {"title": "Movie.2024.720p.BluRay.x264-GRP", "size": "3000000000"},
+    ]
+    filtered, all_parsed = filter_results(results)
+    assert len(filtered) == 1  # Only 1080p passes
+    assert len(all_parsed) == 2  # Both have _meta attached

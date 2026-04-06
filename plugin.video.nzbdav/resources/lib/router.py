@@ -45,7 +45,7 @@ def route(argv):
     xbmc.log("NZB-DAV: Routing path='{}' params={}".format(path, params), xbmc.LOGDEBUG)
 
     if path == "/play":
-        _handle_play(params)
+        _handle_play(handle, params)
     elif path == "/search":
         _handle_search(handle, params)
     elif path == "/resolve":
@@ -70,22 +70,33 @@ def route(argv):
         import xbmcaddon
 
         xbmcaddon.Addon().openSettings()
+    elif path == "/test_hydra":
+        _test_hydra_connection()
+    elif path == "/test_nzbdav":
+        _test_nzbdav_connection()
     else:
         _handle_main_menu(handle)
 
 
-def _handle_play(params):
-    """Called via executebuiltin://RunPlugin from TMDBHelper.
+def _clean_params(params):
+    """Clean TMDBHelper params — replace '_' placeholders with empty strings."""
+    return {k: ("" if v == "_" else v) for k, v in params.items()}
 
-    Shows progress bar while searching, then redirects to full-screen
-    /search directory listing via ActivateWindow.
+
+def _handle_play(handle, params):
+    """Called via plugin:// URL from TMDBHelper.
+
+    Searches NZBHydra, shows results dialog, then resolves the selected
+    NZB through Kodi's setResolvedUrl pipeline (no dummy.mp4 needed).
     """
     import xbmcgui
+    import xbmcplugin
 
     from resources.lib.cache import get_cached, set_cached
     from resources.lib.http_util import notify
     from resources.lib.hydra import search_hydra
 
+    params = _clean_params(params)
     search_type = params.get("type", "movie")
     title = params.get("title", "")
     year = params.get("year", "")
@@ -103,9 +114,14 @@ def _handle_play(params):
 
     if results is None:
         progress.update(30, _string(30084))
-        results = search_hydra(
+        results, search_error = search_hydra(
             search_type, title, year=year, imdb=imdb, season=season, episode=episode
         )
+        if search_error:
+            progress.close()
+            notify(_addon_name(), search_error, 5000)
+            xbmcplugin.setResolvedUrl(handle, False, xbmcgui.ListItem())
+            return
         if results:
             progress.update(70, _fmt(30085, len(results)))
             set_cached(search_type, title, results, **cache_kwargs)
@@ -114,11 +130,13 @@ def _handle_play(params):
 
     if progress.iscanceled():
         progress.close()
+        xbmcplugin.setResolvedUrl(handle, False, xbmcgui.ListItem())
         return
 
     if not results:
         progress.close()
         notify(_addon_name(), _fmt(30087, title), 3000)
+        xbmcplugin.setResolvedUrl(handle, False, xbmcgui.ListItem())
         return
 
     progress.update(90, _string(30088))
@@ -126,13 +144,27 @@ def _handle_play(params):
     from resources.lib.filter import filter_results
 
     total_count = len(results)
-    filtered = filter_results(results)
+    filtered, all_parsed = filter_results(results)
 
     progress.close()
 
     if not filtered:
-        notify(_addon_name(), _fmt(30089, title), 3000)
-        return
+        if all_parsed:
+            choice = xbmcgui.Dialog().yesno(
+                _addon_name(),
+                "All {} results were filtered out. Show unfiltered?".format(
+                    len(all_parsed)
+                ),
+            )
+            if choice:
+                filtered = all_parsed
+            else:
+                xbmcplugin.setResolvedUrl(handle, False, xbmcgui.ListItem())
+                return
+        else:
+            notify(_addon_name(), _fmt(30087, title), 3000)
+            xbmcplugin.setResolvedUrl(handle, False, xbmcgui.ListItem())
+            return
 
     # Auto-select best match if enabled
     import xbmcaddon
@@ -140,12 +172,12 @@ def _handle_play(params):
     addon = xbmcaddon.Addon()
     if addon.getSetting("auto_select_best").lower() == "true":
         best = filtered[0]
-        from resources.lib.resolver import resolve_and_play
+        from resources.lib.resolver import resolve
 
-        resolve_and_play(best["link"], best["title"])
+        resolve(handle, {"nzburl": best["link"], "title": best["title"]})
         return
 
-    # Show custom results dialog directly (no ActivateWindow needed)
+    # Show custom results dialog
     from resources.lib.results_dialog import show_results_dialog
 
     selected = show_results_dialog(
@@ -153,9 +185,11 @@ def _handle_play(params):
     )
 
     if selected:
-        from resources.lib.resolver import resolve_and_play
+        from resources.lib.resolver import resolve
 
-        resolve_and_play(selected["link"], selected["title"])
+        resolve(handle, {"nzburl": selected["link"], "title": selected["title"]})
+    else:
+        xbmcplugin.setResolvedUrl(handle, False, xbmcgui.ListItem())
 
 
 def _handle_search(handle, params):
@@ -167,6 +201,7 @@ def _handle_search(handle, params):
     from resources.lib.filter import filter_results
     from resources.lib.hydra import search_hydra
 
+    params = _clean_params(params)
     search_type = params.get("type", "movie")
     title = params.get("title", "")
     year = params.get("year", "")
@@ -177,9 +212,15 @@ def _handle_search(handle, params):
     cache_kwargs = dict(year=year, imdb=imdb, season=season, episode=episode)
     results = get_cached(search_type, title, **cache_kwargs)
     if results is None:
-        results = search_hydra(
+        results, search_error = search_hydra(
             search_type, title, year=year, imdb=imdb, season=season, episode=episode
         )
+        if search_error:
+            from resources.lib.http_util import notify
+
+            notify(_addon_name(), search_error, 5000)
+            xbmcplugin.endOfDirectory(handle, succeeded=False)
+            return
         if results:
             set_cached(search_type, title, results, **cache_kwargs)
 
@@ -191,7 +232,29 @@ def _handle_search(handle, params):
         return
 
     total_count = len(results)
-    filtered = filter_results(results)
+    filtered, all_parsed = filter_results(results)
+
+    if not filtered:
+        if all_parsed:
+            import xbmcgui as _gui
+
+            choice = _gui.Dialog().yesno(
+                _addon_name(),
+                "All {} results were filtered out. Show unfiltered?".format(
+                    len(all_parsed)
+                ),
+            )
+            if choice:
+                filtered = all_parsed
+            else:
+                xbmcplugin.endOfDirectory(handle, succeeded=False)
+                return
+        else:
+            from resources.lib.http_util import notify
+
+            notify(_addon_name(), _fmt(30087, title), 3000)
+            xbmcplugin.endOfDirectory(handle, succeeded=False)
+            return
 
     # Auto-select best match if enabled
     addon = xbmcaddon.Addon()
@@ -295,6 +358,64 @@ def _get_tmdb_poster(imdb_id):
         return ""
     except Exception:
         return ""
+
+
+def _test_hydra_connection():
+    """Test NZBHydra2 connection by hitting the caps endpoint."""
+    import xbmcaddon
+
+    from resources.lib.http_util import http_get, notify
+
+    addon = xbmcaddon.Addon()
+    url = addon.getSetting("hydra_url").rstrip("/")
+    api_key = addon.getSetting("hydra_api_key")
+
+    if not url:
+        notify(_addon_name(), "NZBHydra URL not configured", 3000)
+        return
+
+    test_url = "{}/api?apikey={}&t=caps&o=xml".format(url, api_key)
+    try:
+        response = http_get(test_url)
+        if "<caps>" in response or "<server" in response:
+            notify(_addon_name(), "NZBHydra connection OK", 3000)
+        else:
+            notify(_addon_name(), "NZBHydra: unexpected response", 5000)
+    except Exception as e:
+        notify(
+            _addon_name(),
+            "NZBHydra: {}".format(str(e)[:60]),
+            5000,
+        )
+
+
+def _test_nzbdav_connection():
+    """Test nzbdav connection by hitting the version endpoint."""
+    import xbmcaddon
+
+    from resources.lib.http_util import http_get, notify
+
+    addon = xbmcaddon.Addon()
+    url = addon.getSetting("nzbdav_url").rstrip("/")
+    api_key = addon.getSetting("nzbdav_api_key")
+
+    if not url:
+        notify(_addon_name(), "nzbdav URL not configured", 3000)
+        return
+
+    test_url = "{}/api?mode=version&apikey={}&output=json".format(url, api_key)
+    try:
+        response = http_get(test_url)
+        if "version" in response:
+            notify(_addon_name(), "nzbdav connection OK", 3000)
+        else:
+            notify(_addon_name(), "nzbdav: unexpected response", 5000)
+    except Exception as e:
+        notify(
+            _addon_name(),
+            "nzbdav: {}".format(str(e)[:60]),
+            5000,
+        )
 
 
 def _handle_main_menu(handle):

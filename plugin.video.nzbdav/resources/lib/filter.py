@@ -298,7 +298,10 @@ def matches_filters(result, meta, settings):
         return False
 
     if result.get("size"):
-        size_mb = int(result["size"]) / 1048576
+        try:
+            size_mb = int(result["size"]) / 1048576
+        except (ValueError, TypeError):
+            size_mb = 0
         if settings["min_size"] > 0 and size_mb < settings["min_size"]:
             return False
         if settings["max_size"] > 0 and size_mb > settings["max_size"]:
@@ -308,28 +311,30 @@ def matches_filters(result, meta, settings):
 
 
 def filter_results(results):
-    """Apply all filters, sort, and truncate results."""
+    """Apply filters, sort, truncate. Returns (filtered, all_parsed)."""
     settings = _get_filter_settings()
 
-    total_in = len(results)
+    all_parsed = []
     filtered = []
     for result in results:
         meta = parse_title_metadata(result["title"])
+        result["_meta"] = meta
+        all_parsed.append(result)
         if matches_filters(result, meta, settings):
-            result["_meta"] = meta
             filtered.append(result)
 
     filtered = _sort_results(filtered, settings)
+    all_parsed = _sort_results(all_parsed, settings)
 
     max_results = settings["max_results"]
     if max_results > 0:
         filtered = filtered[:max_results]
 
     xbmc.log(
-        "NZB-DAV: Filtered {} -> {} results".format(total_in, len(filtered)),
+        "NZB-DAV: Filtered {} -> {} results".format(len(all_parsed), len(filtered)),
         xbmc.LOGDEBUG,
     )
-    return filtered
+    return filtered, all_parsed
 
 
 def _sort_results(results, settings):
