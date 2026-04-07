@@ -188,7 +188,7 @@ Once the history API reports `Completed`, the storage path is converted to a Web
 /mnt/nzbdav/completed-symlinks/uncategorized/Name  →  /content/uncategorized/Name/
 ```
 
-`find_video_file()` issues a WebDAV `PROPFIND` request on that folder, parses the XML response, and returns the path of the largest video file (`.mkv`, `.mp4`, `.avi`, etc.) found in the directory tree.
+`find_video_file()` issues a WebDAV `PROPFIND` request on that folder and parses the XML response. It selects the largest video file (`.mkv`, `.mp4`, `.avi`, etc.) at the current level when one is present; only if no video file is found at that level does it recurse into subdirectories, up to two levels deep.
 
 **Network failures during polling**: if both queue and history return `None` in the same poll cycle, the addon probes the WebDAV server with a single HEAD request. This distinguishes authentication failures (`401` → terminal error, abort) from transient server errors (`5xx` → log warning, continue polling on next cycle).
 
