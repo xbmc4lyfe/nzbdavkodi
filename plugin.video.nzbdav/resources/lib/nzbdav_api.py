@@ -22,6 +22,30 @@ def _get_settings():
 
 
 def submit_nzb(nzb_url, nzb_name=""):
+    """Submit an NZB to nzbdav for download via the SABnzbd-compatible API.
+
+    Uses the ``addurl`` mode to pass the NZB by URL rather than uploading the
+    raw bytes, so nzbdav fetches the file directly from NZBHydra2.
+
+    Args:
+        nzb_url: Fully-qualified URL pointing to the NZB file, as returned in
+            the ``link`` field of NZBHydra2 search results.
+        nzb_name: Optional human-readable name shown in the nzbdav queue.
+            Defaults to an empty string, which lets nzbdav derive the name
+            from the NZB file itself.
+
+    Returns:
+        The ``nzo_id`` string assigned by nzbdav on success (e.g.
+        ``"SABnzbd_nzo_abc123"``), used to poll download progress.
+        Returns ``None`` on any failure: settings read error, network error,
+        unexpected JSON response, or an empty ``nzo_ids`` list in the response.
+
+    Side effects:
+        Makes one HTTP GET request to nzbdav's SABnzbd-compatible API
+        (``/api?mode=addurl``).
+        Logs the (redacted) request URL and errors via ``xbmc.log``.
+        Reads addon settings via ``xbmcaddon.Addon().getSetting()``.
+    """
     try:
         base_url, api_key = _get_settings()
     except Exception as e:
@@ -168,8 +192,23 @@ def find_completed_by_name(name):
 def get_completed_names():
     """Fetch all completed download names from nzbdav history.
 
-    Returns a set of name strings for fast membership testing.
-    Returns empty set on any error (non-blocking).
+    Retrieves up to 500 history slots and returns only the names of jobs whose
+    status is ``"Completed"``.  This function has no internal cache — every
+    call makes a live HTTP request to nzbdav.  Callers should avoid invoking
+    it in a tight loop; instead, call it once per polling cycle and reuse the
+    returned set for all membership checks within that cycle.
+
+    Returns:
+        A ``set`` of name strings for fast ``in`` membership testing.
+        Returns an empty ``set`` on any error (settings read failure, network
+        error, or unexpected response) so callers can always iterate safely
+        without checking for ``None``.
+
+    Side effects:
+        Makes one HTTP GET request to nzbdav's SABnzbd-compatible history API
+        (``/api?mode=history&limit=500``).
+        Logs the number of names loaded at ``xbmc.LOGDEBUG`` level.
+        Reads addon settings via ``xbmcaddon.Addon().getSetting()``.
     """
     try:
         base_url, api_key = _get_settings()
@@ -203,6 +242,25 @@ def get_completed_names():
 
 
 def get_job_status(nzo_id):
+    """Query nzbdav's active download queue for the status of a specific job.
+
+    Args:
+        nzo_id: The nzbdav job identifier string returned by :func:`submit_nzb`
+            (e.g. ``"SABnzbd_nzo_abc123"``).
+
+    Returns:
+        A dict with keys ``status`` (str), ``percentage`` (str), and
+        ``filename`` (str) when the job is present in the active queue.
+        Returns ``None`` when the job is not found in the queue (which
+        typically means it has finished and moved to history), when settings
+        cannot be read, or when the API request fails.
+
+    Side effects:
+        Makes one HTTP GET request to nzbdav's SABnzbd-compatible queue API
+        (``/api?mode=queue&nzo_ids=<nzo_id>``).
+        Logs the (redacted) request URL and errors via ``xbmc.log``.
+        Reads addon settings via ``xbmcaddon.Addon().getSetting()``.
+    """
     try:
         base_url, api_key = _get_settings()
     except Exception as e:

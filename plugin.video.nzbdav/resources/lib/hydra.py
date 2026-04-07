@@ -28,16 +28,35 @@ def search_hydra(search_type, title, year="", imdb="", season="", episode=""):
     """Search NZBHydra2 for NZBs.
 
     Args:
-        search_type: "movie" or "episode"
-        title: Movie or show title
-        year: Release year
-        imdb: IMDb ID (e.g. "tt0133093")
-        season: Season number (TV only)
-        episode: Episode number (TV only)
+        search_type: Query type — "movie" for films, "episode" for TV series.
+            Controls the Newznab ``t`` parameter ("movie" or "tvsearch").
+        title: Movie or show title used as a fallback query when ``imdb`` is
+            empty, and as the retry query when an IMDB search returns nothing.
+        year: Optional release year (passed through but not currently sent to
+            the Newznab API; reserved for future use).
+        imdb: IMDb ID including the "tt" prefix (e.g. ``"tt0133093"``).
+            When provided the search uses ``imdbid`` instead of a title query.
+            If the IMDB search returns no results the function automatically
+            retries with ``title`` as a plain-text query.
+        season: Season number string for TV searches (e.g. ``"1"``).
+            Ignored when ``search_type`` is ``"movie"``.
+        episode: Episode number string for TV searches (e.g. ``"3"``).
+            Ignored when ``search_type`` is ``"movie"``.
 
     Returns:
-        Tuple of (results, error) where results is a list of result dicts and
-        error is None on success or a string describing the failure.
+        A two-tuple ``(results, error)``.
+        ``results`` is a list of dicts, each containing the keys ``title``,
+        ``link``, ``size``, ``indexer``, ``pubdate``, and ``age``.
+        ``error`` is ``None`` on success, or a short human-readable string
+        describing the failure (settings read error, network error, etc.).
+        On failure ``results`` is always an empty list.
+
+    Side effects:
+        Makes one or two HTTP GET requests to the NZBHydra2 Newznab API
+        (a second request is made when an IMDB search returns no results and
+        a title is available for the fallback retry).
+        Logs progress and errors to the Kodi log via ``xbmc.log``.
+        Reads addon settings via ``xbmcaddon.Addon().getSetting()``.
     """
     try:
         base_url, api_key = _get_settings()

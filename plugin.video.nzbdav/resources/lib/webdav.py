@@ -82,12 +82,28 @@ def check_file_available_with_retry(filename, max_retries=3, retry_delay=2):
     Args:
         filename: The filename to check on the WebDAV server.
         max_retries: Maximum number of retry attempts on connection errors.
+            Retries are only triggered by low-level connection exceptions;
+            HTTP error status codes (404, 401, 5xx) return immediately
+            without retrying.
         retry_delay: Seconds to wait between retries.
 
     Returns:
-        Tuple of (available: bool, error_type: str or None).
-        error_type is one of: None (success), "not_found", "auth_failed",
-        "server_error", "connection_error".
+        A two-tuple ``(available, error_type)``.
+        ``available`` is ``True`` only when the server returns HTTP 200.
+        ``error_type`` is ``None`` on success, or one of the strings:
+        ``"not_found"`` (HTTP 404 or other non-200/non-error status),
+        ``"auth_failed"`` (HTTP 401 or 403),
+        ``"server_error"`` (HTTP 5xx), or
+        ``"connection_error"`` (exception raised after all retries are
+        exhausted).
+
+    Side effects:
+        Makes between 1 and ``max_retries + 1`` HTTP HEAD requests to the
+        WebDAV server.
+        Sleeps for ``retry_delay`` seconds between retries on connection
+        errors (using ``time.sleep``).
+        Logs progress and errors via ``xbmc.log``.
+        Reads addon settings via ``xbmcaddon.Addon().getSetting()``.
     """
     settings = _get_settings()
     url = build_webdav_url(filename)
@@ -161,11 +177,32 @@ def check_file_available_with_retry(filename, max_retries=3, retry_delay=2):
 
 
 def find_video_file(folder_path, _depth=0):
-    """Browse a WebDAV folder and find the video file.
+    """Browse a WebDAV folder and find the largest video file.
 
-    Uses PROPFIND to list files, returns the path to the largest video file.
-    Recurses into subdirectories up to 2 levels deep if no video found.
-    Returns None if no video file found.
+    Sends a ``PROPFIND`` request with ``Depth: 1`` to list the folder
+    contents, then selects the video file with the greatest
+    ``getcontentlength``.  If no video is found at the current level, the
+    function recurses into any discovered sub-directories.
+
+    Args:
+        folder_path: Server-relative or absolute path to the WebDAV folder to
+            search (e.g. ``"/content/uncategorized/My.Movie.2024/"``).
+            The path is percent-encoded before the request is sent.
+        _depth: Internal recursion counter — callers must not set this.
+            Recursion stops when ``_depth`` exceeds 2, preventing runaway
+            traversal of deeply nested directory trees.
+
+    Returns:
+        The server-relative path string of the largest video file found
+        (as returned in the ``href`` of the PROPFIND response), or ``None``
+        if no video file is found within the recursion limit, the folder
+        does not exist, or any network or XML parsing error occurs.
+
+    Side effects:
+        Makes one HTTP ``PROPFIND`` request per directory level visited
+        (up to 3 levels: depth 0, 1, and 2).
+        Logs progress, warnings, and errors via ``xbmc.log``.
+        Reads addon settings via ``xbmcaddon.Addon().getSetting()``.
     """
     import xml.etree.ElementTree as ET
 

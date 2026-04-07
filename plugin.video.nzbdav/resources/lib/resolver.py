@@ -230,10 +230,33 @@ def _storage_to_webdav_path(storage):
 def _poll_once(nzo_id, title):
     """Poll nzbdav queue API and history API in parallel.
 
-    Returns (job_status, history_status, error_type).
-    job_status is from the queue API (active downloads).
-    history_status is from the history API (completed downloads).
-    error_type is set if a WebDAV check encounters auth/server errors.
+    Spawns two threads — one to query the active queue and one to query the
+    completed history — then waits up to 10 seconds for both to finish.  When
+    neither API returns a result (the job is not in the queue and not in
+    history), a lightweight WebDAV HEAD check is performed to detect
+    persistent configuration errors early.
+
+    Args:
+        nzo_id: The nzbdav job identifier string (e.g.
+            ``"SABnzbd_nzo_abc123"``).
+        title: The NZB title, used as the WebDAV filename for the fallback
+            error-type probe when both queue and history return nothing.
+
+    Returns:
+        A three-tuple ``(job_status, history_status, error_type)``.
+
+        * ``job_status`` — dict returned by :func:`get_job_status` when the
+          job is still active in the queue (keys: ``status``, ``percentage``,
+          ``filename``), or ``None`` if the job is not in the queue or the
+          request failed.
+        * ``history_status`` — dict returned by :func:`get_job_history` when
+          the job appears in nzbdav history (keys: ``status``, ``storage``,
+          ``name``), or ``None`` if the job is not in history or the request
+          failed.
+        * ``error_type`` — a string such as ``"auth_failed"``,
+          ``"server_error"``, or ``"connection_error"`` when the WebDAV probe
+          detects a configuration problem; ``None`` in all other cases,
+          including when the job is still downloading normally.
     """
     job_status = [None]
     history_status = [None]
