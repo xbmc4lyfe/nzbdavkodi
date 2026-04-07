@@ -101,7 +101,25 @@ def route(argv):
 
 
 def _clean_params(params):
-    """Clean TMDBHelper params — replace '_' placeholders with empty strings."""
+    """Clean TMDBHelper params — replace '_' placeholders with empty strings.
+
+    TMDBHelper uses '_' (underscore) as a sentinel value when a template variable
+    has no value. For example, in play_movie URL templates like:
+        plugin://plugin.video.nzbdav/play?type=movie&title={title}&year={year}&imdb={imdb}
+
+    If a movie lacks an IMDb ID, TMDBHelper sends '&imdb=_' instead of omitting
+    the parameter. This function converts those '_' placeholders to empty strings
+    so the addon can treat them as "not provided" and use fallback logic.
+
+    See: https://github.com/jurialmunkey/plugin.video.themoviedb.helper/wiki/PlayerConfig
+
+    Args:
+        params: Dictionary of URL query parameters from TMDBHelper
+
+    Returns:
+        Dictionary with '_' string values replaced by empty strings
+    """
+    # Replace '_' sentinel values with empty strings for cleaner logic downstream
     return {k: ("" if v == "_" else v) for k, v in params.items()}
 
 

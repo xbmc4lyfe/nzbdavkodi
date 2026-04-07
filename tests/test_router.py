@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 from urllib.parse import urlencode
 
 from resources.lib.router import (
+    _clean_params,
     _format_info_line,
     _format_size,
     parse_params,
@@ -95,6 +96,80 @@ def test_parse_params_none():
     """None input should return empty params."""
     params = parse_params(None)
     assert params == {}
+
+
+# --- _clean_params tests ---
+
+
+def test_clean_params_underscore_placeholder():
+    """TMDBHelper sends '_' as placeholder for missing values.
+
+    Should convert to empty string.
+    """
+    # Scenario: movie with no IMDb ID
+    params = {"type": "movie", "title": "The Matrix", "year": "1999", "imdb": "_"}
+    cleaned = _clean_params(params)
+    assert cleaned["type"] == "movie", "Non-placeholder values should pass through"
+    assert (
+        cleaned["title"] == "The Matrix"
+    ), "Non-placeholder values should pass through"
+    assert cleaned["year"] == "1999", "Non-placeholder values should pass through"
+    assert (
+        cleaned["imdb"] == ""
+    ), "Underscore placeholder should be replaced with empty string"
+
+
+def test_clean_params_multiple_placeholders():
+    """Multiple '_' placeholders should all be converted to empty strings."""
+    params = {
+        "type": "episode",
+        "title": "_",
+        "season": "5",
+        "episode": "14",
+        "imdb": "_",
+        "tmdb_id": "_",
+    }
+    cleaned = _clean_params(params)
+    assert cleaned["title"] == "", "First placeholder should be replaced"
+    assert cleaned["season"] == "5", "Non-placeholder should pass through"
+    assert cleaned["episode"] == "14", "Non-placeholder should pass through"
+    assert cleaned["imdb"] == "", "Second placeholder should be replaced"
+    assert cleaned["tmdb_id"] == "", "Third placeholder should be replaced"
+
+
+def test_clean_params_no_placeholders():
+    """Params without '_' placeholders should pass through unchanged."""
+    params = {
+        "type": "movie",
+        "title": "The Matrix",
+        "year": "1999",
+        "imdb": "tt0133093",
+    }
+    cleaned = _clean_params(params)
+    assert cleaned == params, "Non-placeholder params should be unchanged"
+
+
+def test_clean_params_empty_dict():
+    """Empty params dict should return empty dict."""
+    params = {}
+    cleaned = _clean_params(params)
+    assert cleaned == {}, "Empty dict should remain empty"
+
+
+def test_clean_params_underscore_in_value():
+    """Underscores within actual values (not standalone '_') should NOT be replaced."""
+    # Title with underscores should be preserved
+    params = {
+        "type": "movie",
+        "title": "Spider_Man_No_Way_Home",
+        "year": "2021",
+        "imdb": "_",
+    }
+    cleaned = _clean_params(params)
+    assert (
+        cleaned["title"] == "Spider_Man_No_Way_Home"
+    ), "Underscores within values should be preserved"
+    assert cleaned["imdb"] == "", "Standalone '_' placeholder should be replaced"
 
 
 # --- _format_size tests ---
