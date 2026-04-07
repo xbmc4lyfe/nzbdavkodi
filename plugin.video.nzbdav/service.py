@@ -28,7 +28,13 @@ _HOME_WINDOW = xbmcgui.Window(10000)
 
 
 class NzbdavPlayer(xbmc.Player):
-    """Persistent player that monitors NZB-DAV streams for failures."""
+    """Primary production monitor running inside the background service.
+
+    Watches window properties that the resolver sets when a stream starts,
+    then retries stalled/erroring NZB-DAV playback while the service and
+    StreamProxy stay alive. This supersedes the older PlaybackMonitor helper,
+    which the addon no longer instantiates at runtime.
+    """
 
     def __init__(self):
         super().__init__()

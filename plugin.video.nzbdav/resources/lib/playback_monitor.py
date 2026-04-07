@@ -10,7 +10,11 @@ from resources.lib.http_util import notify as _notify
 
 
 class PlaybackMonitor(xbmc.Player):
-    """Monitors playback and optionally retries on failure.
+    """Legacy foreground monitor that predates the service-based NzbdavPlayer.
+
+    The addon no longer instantiates this class at runtime; it remains for
+    manual testing and as a reference implementation. Changes here do not
+    affect production playback behaviour—update NzbdavPlayer instead.
 
     Usage:
         monitor = PlaybackMonitor(stream_url, max_retries=3)
