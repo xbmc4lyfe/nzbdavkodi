@@ -10,15 +10,15 @@ cases `_fallback_parse()` when introducing new metadata fields.
 ## Architecture overview
 
 ```
-settings.xml          ← Kodi UI control, stores user's choice
+settings.xml             ← Kodi UI control, stores user's choice
       ↓
-_get_filter_settings()  ← reads setting into a Python dict
+_get_filter_settings()   ← reads setting into a Python dict
       ↓
-parse_title_metadata()  ← extracts the matching attribute from the NZB title
+parse_title_metadata()   ← extracts the matching attribute from the NZB title
       ↓
-matches_filters()       ← applies the filter logic
+matches_filters()        ← applies the filter logic
       ↓
-test_filter.py          ← verifies all of the above
+tests/test_filter.py     ← verifies all of the above
 ```
 
 ---
