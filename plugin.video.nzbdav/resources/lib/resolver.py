@@ -285,6 +285,12 @@ def _poll_until_ready(nzb_url, title, dialog, poll_interval, download_timeout):
         video_path = find_video_file(webdav_folder)
         if video_path:
             stream_url, stream_headers = get_webdav_stream_url_for_path(video_path)
+            if not _validate_stream_url(stream_url, stream_headers):
+                xbmc.log(
+                    "NZB-DAV: Stream validation failed for '{}', "
+                    "attempting playback anyway".format(video_path),
+                    xbmc.LOGWARNING,
+                )
             return stream_url, stream_headers
 
     xbmc.log("NZB-DAV: Submitting NZB for '{}'".format(title), xbmc.LOGINFO)
@@ -450,7 +456,7 @@ def _poll_until_ready(nzb_url, title, dialog, poll_interval, download_timeout):
                 xbmc.LOGWARNING,
             )
 
-        if monitor.waitForAbort(poll_interval):
+        if monitor.waitForAbort(max(1, poll_interval)):
             # Kodi is shutting down
             xbmc.log("NZB-DAV: Kodi shutdown detected, aborting resolve", xbmc.LOGINFO)
             return None
@@ -490,6 +496,10 @@ def resolve(handle, params):
 
 def resolve_and_play(nzb_url, title):
     """Handle direct execution (executebuiltin:// calls)."""
+    if not nzb_url:
+        _notify(_addon_name(), _string(30096))
+        return
+
     poll_interval, download_timeout = _get_poll_settings()
 
     dialog = xbmcgui.DialogProgress()

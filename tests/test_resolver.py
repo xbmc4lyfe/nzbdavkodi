@@ -590,9 +590,9 @@ def _make_dialog(canceled=False):
 @patch("resources.lib.resolver.submit_nzb")
 @patch("resources.lib.resolver.get_webdav_stream_url_for_path")
 @patch("resources.lib.resolver._validate_stream_url")
-@patch("resources.lib.resolver._get_poll_settings")
+@patch("resources.lib.resolver.find_completed_by_name")
 def test_poll_until_ready_success(
-    mock_poll,
+    mock_find_completed,
     mock_validate,
     mock_stream_url,
     mock_submit,
@@ -602,7 +602,7 @@ def test_poll_until_ready_success(
     mock_xbmc,
 ):
     """_poll_until_ready returns (stream_url, headers) when download completes."""
-    mock_poll.return_value = (2, 60)
+    mock_find_completed.return_value = None
     mock_submit.return_value = "SABnzbd_nzo_abc123"
     mock_status.return_value = {"status": "Downloading", "percentage": "100"}
     mock_history.return_value = {
@@ -630,12 +630,10 @@ def test_poll_until_ready_success(
 @patch("resources.lib.resolver.xbmc")
 @patch("resources.lib.resolver.find_completed_by_name")
 @patch("resources.lib.resolver.submit_nzb")
-@patch("resources.lib.resolver._get_poll_settings")
 def test_poll_until_ready_submit_failure_returns_none(
-    mock_poll, mock_submit, mock_find_completed, mock_xbmc
+    mock_submit, mock_find_completed, mock_xbmc
 ):
     """_poll_until_ready returns None when all submit attempts fail."""
-    mock_poll.return_value = (2, 60)
     mock_submit.return_value = None
     mock_find_completed.return_value = None
     mock_xbmc.Monitor.return_value = _make_monitor()
@@ -653,12 +651,12 @@ def test_poll_until_ready_submit_failure_returns_none(
 @patch("resources.lib.resolver.get_job_history")
 @patch("resources.lib.resolver.get_job_status")
 @patch("resources.lib.resolver.submit_nzb")
-@patch("resources.lib.resolver._get_poll_settings")
+@patch("resources.lib.resolver.find_completed_by_name")
 def test_poll_until_ready_timeout_returns_none(
-    mock_poll, mock_submit, mock_status, mock_history, mock_time, mock_xbmc
+    mock_find_completed, mock_submit, mock_status, mock_history, mock_time, mock_xbmc
 ):
     """_poll_until_ready returns None after download_timeout seconds."""
-    mock_poll.return_value = (2, 5)
+    mock_find_completed.return_value = None
     mock_submit.return_value = "SABnzbd_nzo_abc123"
     mock_status.return_value = {"status": "Downloading", "percentage": "10"}
     mock_history.return_value = None
@@ -676,12 +674,12 @@ def test_poll_until_ready_timeout_returns_none(
 @patch("resources.lib.resolver.get_job_history")
 @patch("resources.lib.resolver.get_job_status")
 @patch("resources.lib.resolver.submit_nzb")
-@patch("resources.lib.resolver._get_poll_settings")
+@patch("resources.lib.resolver.find_completed_by_name")
 def test_poll_until_ready_user_cancel_returns_none(
-    mock_poll, mock_submit, mock_status, mock_history, mock_xbmc
+    mock_find_completed, mock_submit, mock_status, mock_history, mock_xbmc
 ):
     """_poll_until_ready returns None when user cancels the dialog."""
-    mock_poll.return_value = (2, 60)
+    mock_find_completed.return_value = None
     mock_submit.return_value = "SABnzbd_nzo_abc123"
     mock_status.return_value = {"status": "Downloading", "percentage": "50"}
     mock_history.return_value = None
@@ -698,12 +696,12 @@ def test_poll_until_ready_user_cancel_returns_none(
 @patch("resources.lib.resolver.get_job_history")
 @patch("resources.lib.resolver.get_job_status")
 @patch("resources.lib.resolver.submit_nzb")
-@patch("resources.lib.resolver._get_poll_settings")
+@patch("resources.lib.resolver.find_completed_by_name")
 def test_poll_until_ready_job_failed_returns_none(
-    mock_poll, mock_submit, mock_status, mock_history, mock_xbmc
+    mock_find_completed, mock_submit, mock_status, mock_history, mock_xbmc
 ):
     """_poll_until_ready returns None when the job fails."""
-    mock_poll.return_value = (2, 60)
+    mock_find_completed.return_value = None
     mock_submit.return_value = "SABnzbd_nzo_abc123"
     mock_status.return_value = {"status": "Failed", "percentage": "0"}
     mock_history.return_value = None
@@ -720,12 +718,12 @@ def test_poll_until_ready_job_failed_returns_none(
 @patch("resources.lib.resolver.get_job_history")
 @patch("resources.lib.resolver.get_job_status")
 @patch("resources.lib.resolver.submit_nzb")
-@patch("resources.lib.resolver._get_poll_settings")
+@patch("resources.lib.resolver.find_completed_by_name")
 def test_poll_until_ready_job_deleted_returns_none(
-    mock_poll, mock_submit, mock_status, mock_history, mock_xbmc
+    mock_find_completed, mock_submit, mock_status, mock_history, mock_xbmc
 ):
     """_poll_until_ready returns None when the job is deleted."""
-    mock_poll.return_value = (2, 60)
+    mock_find_completed.return_value = None
     mock_submit.return_value = "SABnzbd_nzo_abc123"
     mock_status.return_value = {"status": "Deleted", "percentage": "0"}
     mock_history.return_value = None
@@ -743,9 +741,9 @@ def test_poll_until_ready_job_deleted_returns_none(
 @patch("resources.lib.resolver.find_video_file")
 @patch("resources.lib.resolver.find_completed_by_name")
 @patch("resources.lib.resolver.get_webdav_stream_url_for_path")
-@patch("resources.lib.resolver._get_poll_settings")
+@patch("resources.lib.resolver._validate_stream_url")
 def test_poll_until_ready_already_downloaded(
-    mock_poll,
+    mock_validate,
     mock_stream_url,
     mock_find_completed,
     mock_find_video,
@@ -754,7 +752,7 @@ def test_poll_until_ready_already_downloaded(
 ):
     """_poll_until_ready skips NZB submit and returns stream directly when
     already downloaded."""
-    mock_poll.return_value = (2, 60)
+    mock_validate.return_value = True
     mock_find_completed.return_value = {
         "status": "Completed",
         "storage": "/mnt/nzbdav/completed-symlinks/uncategorized/existing",
@@ -782,12 +780,12 @@ def test_poll_until_ready_already_downloaded(
 @patch("resources.lib.resolver.get_job_history")
 @patch("resources.lib.resolver.get_job_status")
 @patch("resources.lib.resolver.submit_nzb")
-@patch("resources.lib.resolver._get_poll_settings")
+@patch("resources.lib.resolver.find_completed_by_name")
 def test_poll_until_ready_auth_failed_returns_none(
-    mock_poll, mock_submit, mock_status, mock_history, mock_xbmc, mock_notify
+    mock_find_completed, mock_submit, mock_status, mock_history, mock_xbmc, mock_notify
 ):
     """_poll_until_ready returns None and notifies on WebDAV auth failure."""
-    mock_poll.return_value = (2, 60)
+    mock_find_completed.return_value = None
     mock_submit.return_value = "SABnzbd_nzo_abc123"
     mock_status.return_value = None
     mock_history.return_value = None
@@ -810,21 +808,26 @@ def test_poll_until_ready_auth_failed_returns_none(
 @patch("resources.lib.resolver.get_job_history")
 @patch("resources.lib.resolver.get_job_status")
 @patch("resources.lib.resolver.submit_nzb")
-@patch("resources.lib.resolver._get_poll_settings")
 def test_poll_until_ready_max_iterations_returns_none(
-    mock_poll, mock_submit, mock_status, mock_history, mock_xbmc, mock_find
+    mock_submit, mock_status, mock_history, mock_xbmc, mock_find
 ):
     """_poll_until_ready returns None after MAX_POLL_ITERATIONS."""
-    mock_poll.return_value = (0, 999999)
+    max_iterations = 3
+    poll_interval = 0.01
     mock_find.return_value = None
     mock_submit.return_value = "SABnzbd_nzo_stuck"
     mock_status.return_value = {"status": "Queued", "percentage": "0"}
     mock_history.return_value = None
     mock_xbmc.Monitor.return_value = _make_monitor()
 
-    result = _poll_until_ready(
-        "http://hydra/getnzb/stuck", "stuck.mkv", _make_dialog(), 0, 999999
-    )
+    with patch("resources.lib.resolver.MAX_POLL_ITERATIONS", max_iterations):
+        result = _poll_until_ready(
+            "http://hydra/getnzb/stuck",
+            "stuck.mkv",
+            _make_dialog(),
+            poll_interval,
+            999999,
+        )
 
     assert result is None
-    assert mock_status.call_count <= MAX_POLL_ITERATIONS
+    assert mock_status.call_count <= max_iterations
