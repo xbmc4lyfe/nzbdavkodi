@@ -29,6 +29,8 @@ flowchart LR
 
 No separate SABnzbd needed -- nzbdav handles both downloading and serving.
 
+See `docs/ARCHITECTURE.md` for the full data flow, caching, and retry behavior.
+
 ## MP4 Stream Proxy
 
 MP4 files are automatically remuxed to MKV on the fly through a local ffmpeg proxy. This works around a 32-bit Kodi `CFileCache` bug where parsing large MP4 moov atoms over HTTP fails with "corrupted data" errors. MKV and other formats play directly without the proxy.
