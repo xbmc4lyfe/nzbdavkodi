@@ -1,8 +1,11 @@
 # Adding a New Filter Criterion: Step-by-Step Guide
 
-Adding a filter requires changes in exactly **five places**. Miss any one of them and the
-filter either silently does nothing (setting read but never applied) or crashes at runtime
-(logic applied but key missing from the metadata dict).
+Adding a filter usually involves **five core code touchpoints** in the main flow below.
+Miss one of these and the filter may silently do nothing (for example, a setting is read
+but never applied) or fail at runtime (for example, logic expects a metadata key that was
+never populated). Depending on the kind of filter, you may also need to update UI/i18n
+strings such as `resources/language/resource.language.en_gb/strings.po`, and in some
+cases `_fallback_parse()` when introducing new metadata fields.
 
 ## Architecture overview
 
