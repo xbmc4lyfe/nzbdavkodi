@@ -80,10 +80,10 @@ The response is Newznab-flavoured RSS/XML. `parse_results()` extracts each `<ite
 {
     "title":   str,   # release name
     "link":    str,   # NZB download URL
-    "size":    int,   # bytes
-    "age":     int,   # days since post
+    "size":    str,   # size value as stored in the parsed result dict
     "indexer": str,   # indexer name from Newznab attr
-    "grabs":   int,   # download count
+    "pubdate": str,   # published date from the RSS item
+    "age":     str,   # human-readable age derived from pubdate
 }
 ```
 
