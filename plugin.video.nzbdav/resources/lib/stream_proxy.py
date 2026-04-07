@@ -77,14 +77,50 @@ def _parse_ffmpeg_duration(stderr_text):
     )
 
 
-_SEEK_THRESHOLD = 10 * 1024 * 1024  # 10MB
+# Byte-offset delta used to distinguish a Kodi buffer-reconnect from a
+# user-initiated seek. Kodi resumes very close to where it left off after
+# transient network hiccups; true seeks jump further. 10MB was chosen
+# empirically: big enough to ignore normal buffering overlap, small enough
+# to catch seeks that would noticeably reposition the stream. Adjust if
+# ffmpeg restarts too often (logs will show repeated seek handling).
+_SEEK_THRESHOLD = 10 * 1024 * 1024
+
+# Drain ffmpeg stdout in 64KB chunks to keep the pipe flowing without
+# overwhelming memory or flooding the socket with tiny writes.
+_FFMPEG_CHUNK_SIZE = 64 * 1024
+
+# Read upstream WebDAV responses in 1MB chunks to reduce HTTP request/response
+# overhead while keeping per-client memory modest.
+_PROXY_CHUNK_SIZE = 1024 * 1024
+
+# Convenience unit for logging transfer sizes.
+_MB = 1024 * 1024
+
+# Allow nzbdav up to two minutes to deliver a range response; nzbdav may need
+# to backfill from Usenet before it can serve data.
+_PROXY_TIMEOUT_SECONDS = 120
+
+# Keep HEAD/range size probes short so UI interactions are not blocked by a
+# slow server.
+_PROBE_HEAD_TIMEOUT_SECONDS = 10
+
+# ffmpeg duration probe should not hang indefinitely; 30s covers slow remote
+# starts but fails fast enough to keep playback responsive.
+_DURATION_PROBE_TIMEOUT_SECONDS = 30
+
+# Service prepare requests may trigger nzbdav to fetch and stage data; give it
+# up to a minute before failing.
+_PREPARE_TIMEOUT_SECONDS = 60
+
+# Limit shutdown waits so Kodi exits promptly even if threads misbehave.
+_SHUTDOWN_JOIN_TIMEOUT_SECONDS = 5
 
 
 def _is_seek_request(current_byte_pos, requested_byte_pos):
     """Determine if a range request is a genuine seek or a continuation.
 
-    Returns True if the request is far from the current position (>10MB
-    gap or backward), meaning ffmpeg should be restarted with -ss.
+    Returns True if the request is far from the current position (backward or
+    beyond the seek threshold), meaning ffmpeg should be restarted with -ss.
     """
     delta = requested_byte_pos - current_byte_pos
     if delta < 0:
@@ -309,7 +345,7 @@ class _StreamHandler(BaseHTTPRequestHandler):
         total = 0
         try:
             while True:
-                chunk = proc.stdout.read(65536)
+                chunk = proc.stdout.read(_FFMPEG_CHUNK_SIZE)
                 if not chunk:
                     break
                 self.wfile.write(chunk)
@@ -318,9 +354,7 @@ class _StreamHandler(BaseHTTPRequestHandler):
                     self.server.current_byte_pos = requested_start + total
         except (BrokenPipeError, ConnectionResetError):
             xbmc.log(
-                "NZB-DAV: Remux client disconnected after {} MB".format(
-                    total // 1048576
-                ),
+                "NZB-DAV: Remux client disconnected after {} MB".format(total // _MB),
                 xbmc.LOGDEBUG,
             )
         finally:
@@ -330,7 +364,7 @@ class _StreamHandler(BaseHTTPRequestHandler):
             if stderr.strip():
                 xbmc.log("NZB-DAV: ffmpeg: {}".format(stderr[:300]), xbmc.LOGDEBUG)
             xbmc.log(
-                "NZB-DAV: Remux done: {} MB sent".format(total // 1048576),
+                "NZB-DAV: Remux done: {} MB sent".format(total // _MB),
                 xbmc.LOGINFO,
             )
 
@@ -353,7 +387,7 @@ class _StreamHandler(BaseHTTPRequestHandler):
             if ctx.get("auth_header"):
                 req.add_header("Authorization", ctx["auth_header"])
 
-            with urlopen(req, timeout=120) as resp:  # nosec B310
+            with urlopen(req, timeout=_PROXY_TIMEOUT_SECONDS) as resp:  # nosec B310
                 self.send_response(206)
                 self.send_header("Content-Type", ctx["content_type"])
                 self.send_header("Content-Length", str(end - start + 1))
@@ -366,7 +400,7 @@ class _StreamHandler(BaseHTTPRequestHandler):
                 self.end_headers()
 
                 while True:
-                    chunk = resp.read(1048576)
+                    chunk = resp.read(_PROXY_CHUNK_SIZE)
                     if not chunk:
                         break
                     self.wfile.write(chunk)
@@ -417,6 +451,8 @@ class StreamProxy:
 
     def start(self):
         """Start the proxy server on a random port."""
+        # Bind to port 0 so the OS selects a free ephemeral port, avoiding
+        # collisions with other Kodi addons or leftover proxy instances.
         self._server = _ThreadedHTTPServer(("127.0.0.1", 0), _StreamHandler)
         self._server.owner_proxy = self
         self.port = self._server.server_address[1]
@@ -434,7 +470,7 @@ class StreamProxy:
             self._server.shutdown()
             self._server = None
         if self._thread:
-            self._thread.join(timeout=5)
+            self._thread.join(timeout=_SHUTDOWN_JOIN_TIMEOUT_SECONDS)
             self._thread = None
 
     def prepare_stream(self, remote_url, auth_header=None):
@@ -509,7 +545,7 @@ class StreamProxy:
                     proc.kill()
                     proc.wait()
                     return result
-            proc.wait(timeout=30)
+            proc.wait(timeout=_DURATION_PROBE_TIMEOUT_SECONDS)
             return _parse_ffmpeg_duration(collected)
         except (OSError, subprocess.SubprocessError, ValueError) as e:
             xbmc.log("NZB-DAV: Duration probe failed: {}".format(e), xbmc.LOGWARNING)
@@ -522,7 +558,9 @@ class StreamProxy:
         if auth_header:
             req.add_header("Authorization", auth_header)
         try:
-            with urlopen(req, timeout=10) as resp:  # nosec B310
+            with urlopen(
+                req, timeout=_PROBE_HEAD_TIMEOUT_SECONDS
+            ) as resp:  # nosec B310
                 return int(resp.headers.get("Content-Length", 0))
         except (OSError, ValueError):
             pass
@@ -531,7 +569,9 @@ class StreamProxy:
             req.add_header("Range", "bytes=-1")
             if auth_header:
                 req.add_header("Authorization", auth_header)
-            with urlopen(req, timeout=10) as resp:  # nosec B310
+            with urlopen(
+                req, timeout=_PROBE_HEAD_TIMEOUT_SECONDS
+            ) as resp:  # nosec B310
                 cr = resp.headers.get("Content-Range", "")
                 return int(cr.split("/")[1]) if "/" in cr else 0
         except (OSError, ValueError):
@@ -570,7 +610,7 @@ def prepare_stream_via_service(port, remote_url, auth_header=None):
     data = json.dumps({"remote_url": remote_url, "auth_header": auth_header})
     req = Request(url, data=data.encode(), method="POST")
     req.add_header("Content-Type", "application/json")
-    with urlopen(req, timeout=60) as resp:  # nosec B310
+    with urlopen(req, timeout=_PREPARE_TIMEOUT_SECONDS) as resp:  # nosec B310
         result = json.loads(resp.read())
         return result["proxy_url"]
 
