@@ -6,6 +6,7 @@ from urllib.parse import urlencode
 
 from resources.lib.http_util import format_size
 from resources.lib.router import (
+    _clean_params,
     _format_info_line,
     parse_params,
     parse_route,
@@ -56,6 +57,23 @@ def test_parse_params_episode():
 def test_parse_params_empty():
     params = parse_params("")
     assert params == {}
+
+
+def test_clean_params_converts_tmdbhelper_placeholders():
+    """TMDBHelper sends '_' for missing template params; convert to empty strings."""
+    params = {
+        "type": "movie",
+        "title": "The Matrix",
+        "year": "_",
+        "imdb": "_",
+        "season": "1",
+    }
+    cleaned = _clean_params(params)
+    assert cleaned["type"] == "movie"
+    assert cleaned["title"] == "The Matrix"
+    assert cleaned["year"] == ""
+    assert cleaned["imdb"] == ""
+    assert cleaned["season"] == "1", "Non-placeholder values should be preserved"
 
 
 # --- URL encoding/decoding round-trip tests ---
