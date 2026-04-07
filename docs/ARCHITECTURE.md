@@ -230,7 +230,7 @@ By default, MP4 `mov_text` subtitle tracks are converted to SRT for MKV compatib
 
 #### Graceful fallback
 
-If ffmpeg is not installed (checked via `shutil.which` across common CoreELEC/LibreELEC paths), MP4 files fall back to direct WebDAV playback with no remux and no seeking support.
+If ffmpeg is not installed (checked via `shutil.which` across common CoreELEC/LibreELEC paths), MP4 files still play through the local proxy when that service is running, but the proxy falls back to plain byte-range forwarding instead of ffmpeg-based remuxing. In this mode, normal HTTP range requests still work, so Kodi retains standard range/seeking behavior supported by the source, but ffmpeg-specific duration probing and timestamp-based seek remuxing are unavailable.
 
 ### MKV and other formats
 
