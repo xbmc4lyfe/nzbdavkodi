@@ -10,9 +10,22 @@ from resources.lib.http_util import notify as _notify
 
 
 class PlaybackMonitor(xbmc.Player):
-    """Monitors playback and optionally retries on failure.
+    """UNUSED: Alternative playback monitor implementation (not used in production).
 
-    Usage:
+    This class is NOT currently used by the addon. The production player is
+    NzbdavPlayer in service.py, which runs continuously in the background service
+    and monitors streams via window properties.
+
+    This PlaybackMonitor class represents an earlier design where the monitor would
+    be instantiated directly with a stream URL and run a blocking start_monitoring()
+    loop. However, this approach was replaced by the service-based NzbdavPlayer
+    design which better integrates with Kodi's long-running service architecture.
+
+    This class is kept for reference but may be removed in the future to reduce
+    maintenance overhead. If you're looking to modify playback monitoring behavior,
+    see NzbdavPlayer in service.py instead.
+
+    Original intended usage (not used in practice):
         monitor = PlaybackMonitor(stream_url, max_retries=3)
         monitor.start_monitoring()
         # Returns when playback completes, fails permanently, or user stops

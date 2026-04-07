@@ -28,7 +28,26 @@ _HOME_WINDOW = xbmcgui.Window(10000)
 
 
 class NzbdavPlayer(xbmc.Player):
-    """Persistent player that monitors NZB-DAV streams for failures."""
+    """Primary stream monitor running in the background service (service.py).
+
+    Handles nzbdav-specific streams with automatic retry on stall or error.
+    This is the production player used by the addon.
+
+    Key features:
+    - Runs continuously in the background service loop
+    - Monitors streams via window properties (IPC between plugin and service)
+    - Automatic retry logic with configurable max retries and delay
+    - tick() method is called each service loop iteration for retry handling
+
+    The player is activated when resolver.py sets window properties:
+    - nzbdav.active = "true"
+    - nzbdav.stream_url = <stream URL>
+    - nzbdav.stream_title = <stream title>
+
+    Note: An unused alternative implementation exists in playback_monitor.py
+    (PlaybackMonitor class), which was an earlier design but is not used
+    in production. See PlaybackMonitor for details.
+    """
 
     def __init__(self):
         super().__init__()
