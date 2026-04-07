@@ -3,7 +3,12 @@
 
 from unittest.mock import MagicMock, patch
 
-from resources.lib.resolver import MAX_POLL_ITERATIONS, _storage_to_webdav_path, resolve
+from resources.lib.resolver import (
+    MAX_POLL_ITERATIONS,
+    _poll_until_ready,
+    _storage_to_webdav_path,
+    resolve,
+)
 
 
 def _make_monitor(abort_after=None):
@@ -566,3 +571,260 @@ def test_resolve_retries_submit_on_transient_failure(
     resolve(1, {"nzburl": "http://hydra/getnzb/abc", "title": "movie.mkv"})
 
     assert mock_submit.call_count == 2
+
+
+# --- _poll_until_ready() tests ---
+
+
+def _make_dialog(canceled=False):
+    """Make a mock dialog. iscanceled() returns canceled."""
+    dialog = MagicMock()
+    dialog.iscanceled.return_value = canceled
+    return dialog
+
+
+@patch("resources.lib.resolver.xbmc")
+@patch("resources.lib.resolver.find_video_file")
+@patch("resources.lib.resolver.get_job_history")
+@patch("resources.lib.resolver.get_job_status")
+@patch("resources.lib.resolver.submit_nzb")
+@patch("resources.lib.resolver.get_webdav_stream_url_for_path")
+@patch("resources.lib.resolver._validate_stream_url")
+@patch("resources.lib.resolver._get_poll_settings")
+def test_poll_until_ready_success(
+    mock_poll,
+    mock_validate,
+    mock_stream_url,
+    mock_submit,
+    mock_status,
+    mock_history,
+    mock_find,
+    mock_xbmc,
+):
+    """_poll_until_ready returns (stream_url, headers) when download completes."""
+    mock_poll.return_value = (2, 60)
+    mock_submit.return_value = "SABnzbd_nzo_abc123"
+    mock_status.return_value = {"status": "Downloading", "percentage": "100"}
+    mock_history.return_value = {
+        "status": "Completed",
+        "storage": "/mnt/nzbdav/completed-symlinks/uncategorized/movie",
+        "name": "movie",
+    }
+    mock_find.return_value = "/content/uncategorized/movie/movie.mkv"
+    expected_url = "http://webdav:8080/content/uncategorized/movie/movie.mkv"
+    expected_headers = {"Authorization": "Basic dXNlcjpwYXNz"}
+    mock_stream_url.return_value = (expected_url, expected_headers)
+    mock_validate.return_value = True
+    mock_xbmc.Monitor.return_value = _make_monitor()
+
+    result = _poll_until_ready(
+        "http://hydra/getnzb/abc", "movie.mkv", _make_dialog(), 2, 60
+    )
+
+    assert result is not None
+    stream_url, stream_headers = result
+    assert stream_url == expected_url
+    assert stream_headers == expected_headers
+
+
+@patch("resources.lib.resolver.xbmc")
+@patch("resources.lib.resolver.find_completed_by_name")
+@patch("resources.lib.resolver.submit_nzb")
+@patch("resources.lib.resolver._get_poll_settings")
+def test_poll_until_ready_submit_failure_returns_none(
+    mock_poll, mock_submit, mock_find_completed, mock_xbmc
+):
+    """_poll_until_ready returns None when all submit attempts fail."""
+    mock_poll.return_value = (2, 60)
+    mock_submit.return_value = None
+    mock_find_completed.return_value = None
+    mock_xbmc.Monitor.return_value = _make_monitor()
+
+    result = _poll_until_ready(
+        "http://hydra/getnzb/abc", "movie.mkv", _make_dialog(), 2, 60
+    )
+
+    assert result is None
+    assert mock_submit.call_count == 3
+
+
+@patch("resources.lib.resolver.xbmc")
+@patch("resources.lib.resolver.time")
+@patch("resources.lib.resolver.get_job_history")
+@patch("resources.lib.resolver.get_job_status")
+@patch("resources.lib.resolver.submit_nzb")
+@patch("resources.lib.resolver._get_poll_settings")
+def test_poll_until_ready_timeout_returns_none(
+    mock_poll, mock_submit, mock_status, mock_history, mock_time, mock_xbmc
+):
+    """_poll_until_ready returns None after download_timeout seconds."""
+    mock_poll.return_value = (2, 5)
+    mock_submit.return_value = "SABnzbd_nzo_abc123"
+    mock_status.return_value = {"status": "Downloading", "percentage": "10"}
+    mock_history.return_value = None
+    mock_xbmc.Monitor.return_value = _make_monitor()
+    mock_time.time.side_effect = [0.0, 10.0]
+
+    result = _poll_until_ready(
+        "http://hydra/getnzb/abc", "movie.mkv", _make_dialog(), 2, 5
+    )
+
+    assert result is None
+
+
+@patch("resources.lib.resolver.xbmc")
+@patch("resources.lib.resolver.get_job_history")
+@patch("resources.lib.resolver.get_job_status")
+@patch("resources.lib.resolver.submit_nzb")
+@patch("resources.lib.resolver._get_poll_settings")
+def test_poll_until_ready_user_cancel_returns_none(
+    mock_poll, mock_submit, mock_status, mock_history, mock_xbmc
+):
+    """_poll_until_ready returns None when user cancels the dialog."""
+    mock_poll.return_value = (2, 60)
+    mock_submit.return_value = "SABnzbd_nzo_abc123"
+    mock_status.return_value = {"status": "Downloading", "percentage": "50"}
+    mock_history.return_value = None
+    mock_xbmc.Monitor.return_value = _make_monitor()
+
+    result = _poll_until_ready(
+        "http://hydra/getnzb/abc", "movie.mkv", _make_dialog(canceled=True), 2, 60
+    )
+
+    assert result is None
+
+
+@patch("resources.lib.resolver.xbmc")
+@patch("resources.lib.resolver.get_job_history")
+@patch("resources.lib.resolver.get_job_status")
+@patch("resources.lib.resolver.submit_nzb")
+@patch("resources.lib.resolver._get_poll_settings")
+def test_poll_until_ready_job_failed_returns_none(
+    mock_poll, mock_submit, mock_status, mock_history, mock_xbmc
+):
+    """_poll_until_ready returns None when the job fails."""
+    mock_poll.return_value = (2, 60)
+    mock_submit.return_value = "SABnzbd_nzo_abc123"
+    mock_status.return_value = {"status": "Failed", "percentage": "0"}
+    mock_history.return_value = None
+    mock_xbmc.Monitor.return_value = _make_monitor()
+
+    result = _poll_until_ready(
+        "http://hydra/getnzb/abc", "movie.mkv", _make_dialog(), 2, 60
+    )
+
+    assert result is None
+
+
+@patch("resources.lib.resolver.xbmc")
+@patch("resources.lib.resolver.get_job_history")
+@patch("resources.lib.resolver.get_job_status")
+@patch("resources.lib.resolver.submit_nzb")
+@patch("resources.lib.resolver._get_poll_settings")
+def test_poll_until_ready_job_deleted_returns_none(
+    mock_poll, mock_submit, mock_status, mock_history, mock_xbmc
+):
+    """_poll_until_ready returns None when the job is deleted."""
+    mock_poll.return_value = (2, 60)
+    mock_submit.return_value = "SABnzbd_nzo_abc123"
+    mock_status.return_value = {"status": "Deleted", "percentage": "0"}
+    mock_history.return_value = None
+    mock_xbmc.Monitor.return_value = _make_monitor()
+
+    result = _poll_until_ready(
+        "http://hydra/getnzb/abc", "movie.mkv", _make_dialog(), 2, 60
+    )
+
+    assert result is None
+
+
+@patch("resources.lib.resolver.submit_nzb")
+@patch("resources.lib.resolver.xbmc")
+@patch("resources.lib.resolver.find_video_file")
+@patch("resources.lib.resolver.find_completed_by_name")
+@patch("resources.lib.resolver.get_webdav_stream_url_for_path")
+@patch("resources.lib.resolver._get_poll_settings")
+def test_poll_until_ready_already_downloaded(
+    mock_poll,
+    mock_stream_url,
+    mock_find_completed,
+    mock_find_video,
+    mock_xbmc,
+    mock_submit,
+):
+    """_poll_until_ready skips NZB submit and returns stream directly when
+    already downloaded."""
+    mock_poll.return_value = (2, 60)
+    mock_find_completed.return_value = {
+        "status": "Completed",
+        "storage": "/mnt/nzbdav/completed-symlinks/uncategorized/existing",
+        "name": "existing",
+    }
+    mock_find_video.return_value = "/content/uncategorized/existing/existing.mkv"
+    expected_url = "http://webdav:8080/content/uncategorized/existing/existing.mkv"
+    expected_headers = {"Authorization": "Basic dXNlcjpwYXNz"}
+    mock_stream_url.return_value = (expected_url, expected_headers)
+
+    result = _poll_until_ready(
+        "http://hydra/getnzb/abc", "existing.mkv", _make_dialog(), 2, 60
+    )
+
+    assert result is not None
+    stream_url, stream_headers = result
+    assert stream_url == expected_url
+    assert stream_headers == expected_headers
+    # submit_nzb must never be called for already-downloaded titles
+    mock_submit.assert_not_called()
+
+
+@patch("resources.lib.resolver._notify")
+@patch("resources.lib.resolver.xbmc")
+@patch("resources.lib.resolver.get_job_history")
+@patch("resources.lib.resolver.get_job_status")
+@patch("resources.lib.resolver.submit_nzb")
+@patch("resources.lib.resolver._get_poll_settings")
+def test_poll_until_ready_auth_failed_returns_none(
+    mock_poll, mock_submit, mock_status, mock_history, mock_xbmc, mock_notify
+):
+    """_poll_until_ready returns None and notifies on WebDAV auth failure."""
+    mock_poll.return_value = (2, 60)
+    mock_submit.return_value = "SABnzbd_nzo_abc123"
+    mock_status.return_value = None
+    mock_history.return_value = None
+    mock_xbmc.Monitor.return_value = _make_monitor()
+
+    with patch(
+        "resources.lib.resolver.check_file_available_with_retry",
+        return_value=(False, "auth_failed"),
+    ):
+        result = _poll_until_ready(
+            "http://hydra/getnzb/abc", "movie.mkv", _make_dialog(), 2, 60
+        )
+
+    assert result is None
+    mock_notify.assert_called()
+
+
+@patch("resources.lib.resolver.find_completed_by_name")
+@patch("resources.lib.resolver.xbmc")
+@patch("resources.lib.resolver.get_job_history")
+@patch("resources.lib.resolver.get_job_status")
+@patch("resources.lib.resolver.submit_nzb")
+@patch("resources.lib.resolver._get_poll_settings")
+def test_poll_until_ready_max_iterations_returns_none(
+    mock_poll, mock_submit, mock_status, mock_history, mock_xbmc, mock_find
+):
+    """_poll_until_ready returns None after MAX_POLL_ITERATIONS."""
+    mock_poll.return_value = (0, 999999)
+    mock_find.return_value = None
+    mock_submit.return_value = "SABnzbd_nzo_stuck"
+    mock_status.return_value = {"status": "Queued", "percentage": "0"}
+    mock_history.return_value = None
+    mock_xbmc.Monitor.return_value = _make_monitor()
+
+    result = _poll_until_ready(
+        "http://hydra/getnzb/stuck", "stuck.mkv", _make_dialog(), 0, 999999
+    )
+
+    assert result is None
+    assert mock_status.call_count <= MAX_POLL_ITERATIONS
