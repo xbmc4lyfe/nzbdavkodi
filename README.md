@@ -217,6 +217,12 @@ With **Auto-select best match** enabled, the dialog is skipped and the top resul
 
 ---
 
+## Architecture
+
+For a detailed walkthrough of how the addon works internally — data flow between components, caching, retry behaviour, and key design decisions — see **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
+
+---
+
 ## Development
 
 ### Prerequisites
