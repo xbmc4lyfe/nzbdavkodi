@@ -67,7 +67,9 @@ def check_file_available(filename):
         return available
     except Exception as e:
         xbmc.log(
-            "NZB-DAV: WebDAV check failed for '{}': {}".format(filename, e),
+            "NZB-DAV: WebDAV check failed for '{}' at '{}': {} ({})".format(
+                filename, url, e, type(e).__name__
+            ),
             xbmc.LOGERROR,
         )
         return False
@@ -144,14 +146,17 @@ def check_file_available_with_retry(filename, max_retries=3, retry_delay=2):
             if attempt > max_retries:
                 xbmc.log(
                     "NZB-DAV: WebDAV connection error for '{}' "
-                    "after {} attempts: {}".format(filename, max_retries + 1, e),
+                    "after {} attempts at '{}': {} ({})".format(
+                        filename, max_retries + 1, url, e, type(e).__name__
+                    ),
                     xbmc.LOGERROR,
                 )
                 return False, "connection_error"
 
             xbmc.log(
-                "NZB-DAV: WebDAV connection error for '{}' (attempt {}/{}): {}".format(
-                    filename, attempt, max_retries, e
+                "NZB-DAV: WebDAV connection error for '{}' at '{}' "
+                "(attempt {}/{}): {} ({})".format(
+                    filename, url, attempt, max_retries, e, type(e).__name__
                 ),
                 xbmc.LOGDEBUG,
             )
@@ -227,7 +232,9 @@ def find_video_file(folder_path, _depth=0):
                     href_path = href_text
             except Exception as e:
                 xbmc.log(
-                    "NZB-DAV: Skipping malformed href '{}': {}".format(href_text, e),
+                    "NZB-DAV: Skipping malformed href '{}': {} ({})".format(
+                        href_text, e, type(e).__name__
+                    ),
                     xbmc.LOGWARNING,
                 )
                 continue
@@ -282,7 +289,9 @@ def find_video_file(folder_path, _depth=0):
         return None
     except Exception as e:
         xbmc.log(
-            "NZB-DAV: Error browsing WebDAV folder '{}': {}".format(folder_path, e),
+            "NZB-DAV: Error browsing WebDAV folder '{}' (URL '{}'): {} ({})".format(
+                folder_path, url, e, type(e).__name__
+            ),
             xbmc.LOGERROR,
         )
         return None
@@ -361,7 +370,9 @@ def validate_stream(filename):
         return e.code in (200, 206)
     except Exception as e:
         xbmc.log(
-            "NZB-DAV: Stream validation error for '{}': {}".format(filename, e),
+            "NZB-DAV: Stream validation error for '{}' at '{}': {} ({})".format(
+                filename, url, e, type(e).__name__
+            ),
             xbmc.LOGERROR,
         )
         return False

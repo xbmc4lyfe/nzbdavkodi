@@ -9,7 +9,7 @@ from urllib.parse import urlencode
 
 import xbmc
 
-from resources.lib.http_util import http_get as _http_get
+from resources.lib.http_util import http_get as _http_get, redact_url
 
 
 def _get_settings():
@@ -25,7 +25,12 @@ def submit_nzb(nzb_url, nzb_name=""):
     try:
         base_url, api_key = _get_settings()
     except Exception as e:
-        xbmc.log("NZB-DAV: Failed to read nzbdav settings: {}".format(e), xbmc.LOGERROR)
+        xbmc.log(
+            "NZB-DAV: Failed to read nzbdav settings: {} ({})".format(
+                e, type(e).__name__
+            ),
+            xbmc.LOGERROR,
+        )
         return None
     params = {
         "mode": "addurl",
@@ -35,14 +40,18 @@ def submit_nzb(nzb_url, nzb_name=""):
         "output": "json",
     }
     url = "{}/api?{}".format(base_url, urlencode(params))
-    from resources.lib.http_util import redact_url
-
-    xbmc.log("NZB-DAV: Submit NZB URL: {}".format(redact_url(url)), xbmc.LOGDEBUG)
+    redacted_url = redact_url(url)
+    xbmc.log("NZB-DAV: Submit NZB URL: {}".format(redacted_url), xbmc.LOGDEBUG)
     try:
         response_text = _http_get(url)
         response = json.loads(response_text)
     except (URLError, json.JSONDecodeError, Exception) as e:
-        xbmc.log("NZB-DAV: Submit NZB request failed: {}".format(e), xbmc.LOGERROR)
+        xbmc.log(
+            "NZB-DAV: Submit NZB request failed for '{}': {} ({})".format(
+                redacted_url, e, type(e).__name__
+            ),
+            xbmc.LOGERROR,
+        )
         return None
     nzo_ids = response.get("nzo_ids")
     if response.get("status") and isinstance(nzo_ids, list) and nzo_ids and nzo_ids[0]:
@@ -66,7 +75,13 @@ def get_job_history(nzo_id):
     """
     try:
         base_url, api_key = _get_settings()
-    except Exception:
+    except Exception as e:
+        xbmc.log(
+            "NZB-DAV: Failed to read nzbdav settings for history nzo_id={}: {} ({})".format(
+                nzo_id, e, type(e).__name__
+            ),
+            xbmc.LOGERROR,
+        )
         return None
 
     params = {
@@ -76,11 +91,18 @@ def get_job_history(nzo_id):
         "output": "json",
     }
     url = "{}/api?{}".format(base_url, urlencode(params))
+    redacted_url = redact_url(url)
 
     try:
         response_text = _http_get(url)
         response = json.loads(response_text)
-    except Exception:
+    except Exception as e:
+        xbmc.log(
+            "NZB-DAV: Job history request failed for nzo_id={} at '{}': {} ({})".format(
+                nzo_id, redacted_url, e, type(e).__name__
+            ),
+            xbmc.LOGERROR,
+        )
         return None
 
     slots = response.get("history", {}).get("slots", [])
@@ -104,7 +126,13 @@ def find_completed_by_name(name):
     """
     try:
         base_url, api_key = _get_settings()
-    except Exception:
+    except Exception as e:
+        xbmc.log(
+            "NZB-DAV: Failed to read nzbdav settings for history search '{}': {} ({})".format(
+                name, e, type(e).__name__
+            ),
+            xbmc.LOGERROR,
+        )
         return None
 
     # Extract a short search term from the name (first few words)
@@ -118,11 +146,18 @@ def find_completed_by_name(name):
         "search": search_term,
     }
     url = "{}/api?{}".format(base_url, urlencode(params))
+    redacted_url = redact_url(url)
 
     try:
         response_text = _http_get(url)
         response = json.loads(response_text)
-    except Exception:
+    except Exception as e:
+        xbmc.log(
+            "NZB-DAV: History search request failed for '{}' at '{}': {} ({})".format(
+                name, redacted_url, e, type(e).__name__
+            ),
+            xbmc.LOGERROR,
+        )
         return None
 
     slots = response.get("history", {}).get("slots", [])
@@ -143,10 +178,17 @@ def find_completed_by_name(name):
     if search_term:
         params.pop("search")
         url = "{}/api?{}".format(base_url, urlencode(params))
+        redacted_url = redact_url(url)
         try:
             response_text = _http_get(url)
             response = json.loads(response_text)
-        except Exception:
+        except Exception as e:
+            xbmc.log(
+                "NZB-DAV: Broad history search failed for '{}' at '{}': {} ({})".format(
+                    name, redacted_url, e, type(e).__name__
+                ),
+                xbmc.LOGERROR,
+            )
             return None
 
         slots = response.get("history", {}).get("slots", [])
@@ -173,7 +215,13 @@ def get_completed_names():
     """
     try:
         base_url, api_key = _get_settings()
-    except Exception:
+    except Exception as e:
+        xbmc.log(
+            "NZB-DAV: Failed to read nzbdav settings for completed names: {} ({})".format(
+                e, type(e).__name__
+            ),
+            xbmc.LOGERROR,
+        )
         return set()
 
     params = {
@@ -183,11 +231,18 @@ def get_completed_names():
         "limit": 500,
     }
     url = "{}/api?{}".format(base_url, urlencode(params))
+    redacted_url = redact_url(url)
 
     try:
         response_text = _http_get(url)
         response = json.loads(response_text)
-    except Exception:
+    except Exception as e:
+        xbmc.log(
+            "NZB-DAV: Completed names request failed at '{}': {} ({})".format(
+                redacted_url, e, type(e).__name__
+            ),
+            xbmc.LOGERROR,
+        )
         return set()
 
     slots = response.get("history", {}).get("slots", [])
@@ -207,7 +262,9 @@ def get_job_status(nzo_id):
         base_url, api_key = _get_settings()
     except Exception as e:
         xbmc.log(
-            "NZB-DAV: Failed to read nzbdav settings for status check: {}".format(e),
+            "NZB-DAV: Failed to read nzbdav settings for status check: {} ({})".format(
+                e, type(e).__name__
+            ),
             xbmc.LOGERROR,
         )
         return None
@@ -218,15 +275,16 @@ def get_job_status(nzo_id):
         "output": "json",
     }
     url = "{}/api?{}".format(base_url, urlencode(params))
-    from resources.lib.http_util import redact_url
-
-    xbmc.log("NZB-DAV: Job status URL: {}".format(redact_url(url)), xbmc.LOGDEBUG)
+    redacted_url = redact_url(url)
+    xbmc.log("NZB-DAV: Job status URL: {}".format(redacted_url), xbmc.LOGDEBUG)
     try:
         response_text = _http_get(url)
         response = json.loads(response_text)
     except (URLError, json.JSONDecodeError, Exception) as e:
         xbmc.log(
-            "NZB-DAV: Job status request failed for nzo_id={}: {}".format(nzo_id, e),
+            "NZB-DAV: Job status request failed for nzo_id={} at '{}': {} ({})".format(
+                nzo_id, redacted_url, e, type(e).__name__
+            ),
             xbmc.LOGERROR,
         )
         return None

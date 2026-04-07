@@ -42,7 +42,12 @@ def search_hydra(search_type, title, year="", imdb="", season="", episode=""):
     try:
         base_url, api_key = _get_settings()
     except Exception as e:
-        xbmc.log("NZB-DAV: Failed to read Hydra settings: {}".format(e), xbmc.LOGERROR)
+        xbmc.log(
+            "NZB-DAV: Failed to read Hydra settings: {} ({})".format(
+                e, type(e).__name__
+            ),
+            xbmc.LOGERROR,
+        )
         return [], "Failed to read NZBHydra settings"
 
     params = {"apikey": api_key, "o": "xml"}
@@ -67,12 +72,18 @@ def search_hydra(search_type, title, year="", imdb="", season="", episode=""):
     url = "{}/api?{}".format(base_url, urlencode(params))
     from resources.lib.http_util import redact_url
 
-    xbmc.log("NZB-DAV: Hydra search URL: {}".format(redact_url(url)), xbmc.LOGDEBUG)
+    redacted_url = redact_url(url)
+    xbmc.log("NZB-DAV: Hydra search URL: {}".format(redacted_url), xbmc.LOGDEBUG)
 
     try:
         xml_text = _http_get(url)
     except (URLError, Exception) as e:
-        xbmc.log("NZB-DAV: Hydra search request failed: {}".format(e), xbmc.LOGERROR)
+        xbmc.log(
+            "NZB-DAV: Hydra search request failed for '{}': {} ({})".format(
+                redacted_url, e, type(e).__name__
+            ),
+            xbmc.LOGERROR,
+        )
         return [], "Search failed: {}".format(str(e)[:80])
 
     results = parse_results(xml_text)
@@ -88,12 +99,16 @@ def search_hydra(search_type, title, year="", imdb="", season="", episode=""):
         params.pop("imdbid", None)
         params["q"] = title
         fallback_url = "{}/api?{}".format(base_url, urlencode(params))
+        fallback_redacted_url = redact_url(fallback_url)
         try:
             xml_text = _http_get(fallback_url)
             results = parse_results(xml_text)
         except (URLError, Exception) as e:
             xbmc.log(
-                "NZB-DAV: Hydra title fallback failed: {}".format(e), xbmc.LOGERROR
+                "NZB-DAV: Hydra title fallback failed for '{}': {} ({})".format(
+                    fallback_redacted_url, e, type(e).__name__
+                ),
+                xbmc.LOGERROR,
             )
             return [], "Search failed: {}".format(str(e)[:80])
 
@@ -110,7 +125,10 @@ def parse_results(xml_text):
         root = ET.fromstring(xml_text)
     except ET.ParseError as e:
         xbmc.log(
-            "NZB-DAV: Failed to parse Hydra XML response: {}".format(e), xbmc.LOGERROR
+            "NZB-DAV: Failed to parse Hydra XML response: {} ({})".format(
+                e, type(e).__name__
+            ),
+            xbmc.LOGERROR,
         )
         return []
 
@@ -144,7 +162,13 @@ def parse_results(xml_text):
                         from urllib.parse import urlparse
 
                         indexer = urlparse(indexer).hostname or ""
-                    except Exception:
+                    except Exception as e:
+                        xbmc.log(
+                            "NZB-DAV: Failed to parse indexer URL '{}': {} ({})".format(
+                                indexer, e, type(e).__name__
+                            ),
+                            xbmc.LOGDEBUG,
+                        )
                         indexer = ""
 
         # Fallback: get size from enclosure
@@ -203,5 +227,11 @@ def _calculate_age(pubdate_str):
         if months == 1:
             return "1 month"
         return "{} months".format(months)
-    except Exception:
+    except Exception as e:
+        xbmc.log(
+            "NZB-DAV: Failed to parse pubDate '{}' into age: {} ({})".format(
+                pubdate_str, e, type(e).__name__
+            ),
+            xbmc.LOGDEBUG,
+        )
         return ""
