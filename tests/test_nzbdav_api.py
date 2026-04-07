@@ -2,6 +2,7 @@
 # Copyright (C) 2026 nzbdav contributors
 
 import json
+import sys
 from unittest.mock import patch
 
 from resources.lib.nzbdav_api import (
@@ -316,3 +317,51 @@ def test_get_completed_names_returns_empty_on_error(mock_http, mock_settings):
     mock_http.side_effect = Exception("Connection refused")
     names = get_completed_names()
     assert names == set()
+
+
+# --- Exception type logging tests ---
+
+
+@patch("resources.lib.nzbdav_api._get_settings")
+@patch("resources.lib.nzbdav_api._http_get")
+def test_submit_nzb_logs_exception_type(mock_http, mock_settings):
+    """submit_nzb logs exception type name on request failure."""
+    mock_settings.return_value = ("http://nzbdav:3000", "testkey")
+    mock_http.side_effect = ConnectionRefusedError("refused")
+
+    submit_nzb("http://hydra/getnzb/abc", "Movie.2024")
+
+    xbmc = sys.modules["xbmc"]
+    log_msg = xbmc.log.call_args[0][0]
+    assert "ConnectionRefusedError" in log_msg
+
+
+@patch("resources.lib.nzbdav_api._get_settings")
+@patch("resources.lib.nzbdav_api._http_get")
+def test_get_job_history_logs_exception_type(mock_http, mock_settings):
+    """get_job_history logs exception type and nzo_id on request failure."""
+    mock_settings.return_value = ("http://nzbdav:3000", "testkey")
+    mock_http.side_effect = OSError("Network unreachable")
+
+    result = get_job_history("SABnzbd_nzo_test123")
+
+    assert result is None
+    xbmc = sys.modules["xbmc"]
+    log_msg = xbmc.log.call_args[0][0]
+    assert "OSError" in log_msg
+    assert "SABnzbd_nzo_test123" in log_msg
+
+
+@patch("resources.lib.nzbdav_api._get_settings")
+@patch("resources.lib.nzbdav_api._http_get")
+def test_get_completed_names_logs_exception_type(mock_http, mock_settings):
+    """get_completed_names logs exception type on request failure."""
+    mock_settings.return_value = ("http://nzbdav:3000", "testkey")
+    mock_http.side_effect = TimeoutError("timed out")
+
+    names = get_completed_names()
+
+    assert names == set()
+    xbmc = sys.modules["xbmc"]
+    log_msg = xbmc.log.call_args[0][0]
+    assert "TimeoutError" in log_msg

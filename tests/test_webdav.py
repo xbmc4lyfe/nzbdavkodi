@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 nzbdav contributors
 
+import sys
 from unittest.mock import MagicMock, patch
 from urllib.parse import unquote
 
@@ -362,3 +363,51 @@ def test_find_video_file_handles_relative_href(mock_urlopen, mock_settings):
     assert path is not None
     assert path.endswith(".mkv")
     assert "Relative.Movie.2024" in path
+
+
+# --- Exception type logging tests ---
+
+
+@patch("resources.lib.webdav._get_settings")
+@patch("resources.lib.webdav._http_head")
+def test_check_file_available_logs_exception_type(mock_head, mock_settings):
+    """check_file_available logs exception type name and filename on error."""
+    mock_settings.return_value = _SETTINGS_WITH_AUTH
+    mock_head.side_effect = ConnectionRefusedError("Connection refused")
+
+    check_file_available("movie.mkv")
+
+    xbmc = sys.modules["xbmc"]
+    log_msg = xbmc.log.call_args[0][0]
+    assert "ConnectionRefusedError" in log_msg
+    assert "movie.mkv" in log_msg
+
+
+@patch("resources.lib.webdav._get_settings")
+@patch("resources.lib.webdav._http_head")
+def test_check_file_available_with_retry_logs_exception_type(mock_head, mock_settings):
+    """check_file_available_with_retry logs exception type name on exhausted retries."""
+    mock_settings.return_value = _SETTINGS_WITH_AUTH
+    mock_head.side_effect = ConnectionRefusedError("timed out")
+
+    check_file_available_with_retry("stream.mkv", max_retries=0, retry_delay=0)
+
+    xbmc = sys.modules["xbmc"]
+    log_msg = xbmc.log.call_args[0][0]
+    assert "ConnectionRefusedError" in log_msg
+    assert "stream.mkv" in log_msg
+
+
+@patch("resources.lib.webdav._get_settings")
+@patch("resources.lib.webdav.urlopen")
+def test_find_video_file_logs_exception_type(mock_urlopen, mock_settings):
+    """find_video_file logs exception type name and folder path on error."""
+    mock_settings.return_value = _SETTINGS_WITH_AUTH
+    mock_urlopen.side_effect = OSError("Network unreachable")
+
+    find_video_file("/content/some-folder/")
+
+    xbmc = sys.modules["xbmc"]
+    log_msg = xbmc.log.call_args[0][0]
+    assert "OSError" in log_msg
+    assert "/content/some-folder/" in log_msg

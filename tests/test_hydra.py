@@ -2,6 +2,7 @@
 # Copyright (C) 2026 nzbdav contributors
 
 import os
+import sys
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
@@ -271,3 +272,34 @@ def test_search_hydra_returns_error_on_connection_failure(mock_http, mock_settin
     assert not results
     assert error is not None
     assert "failed" in error.lower() or "connection" in error.lower()
+
+
+# --- Exception type logging tests ---
+
+
+@patch("resources.lib.hydra._get_settings")
+@patch("resources.lib.hydra._http_get")
+def test_search_hydra_logs_exception_type(mock_http, mock_settings):
+    """search_hydra logs exception type name on request failure."""
+    mock_settings.return_value = ("http://hydra:5076", "testkey")
+    mock_http.side_effect = ConnectionRefusedError("refused")
+
+    results, error = search_hydra("movie", "The Matrix")
+
+    assert not results
+    xbmc = sys.modules["xbmc"]
+    log_msg = xbmc.log.call_args[0][0]
+    assert "ConnectionRefusedError" in log_msg
+
+
+def test_calculate_age_invalid_logs_exception_type():
+    """_calculate_age logs exception type on parse failure."""
+    xbmc = sys.modules["xbmc"]
+    xbmc.log.reset_mock()
+
+    result = _calculate_age("not-a-real-date")
+
+    assert result == ""
+    xbmc.log.assert_called_once()
+    log_msg = xbmc.log.call_args[0][0]
+    assert "not-a-real-date" in log_msg

@@ -72,7 +72,12 @@ def search_hydra(search_type, title, year="", imdb="", season="", episode=""):
     try:
         xml_text = _http_get(url)
     except (URLError, Exception) as e:
-        xbmc.log("NZB-DAV: Hydra search request failed: {}".format(e), xbmc.LOGERROR)
+        xbmc.log(
+            "NZB-DAV: Hydra search request failed: {} ({})".format(
+                e, type(e).__name__
+            ),
+            xbmc.LOGERROR,
+        )
         return [], "Search failed: {}".format(str(e)[:80])
 
     results = parse_results(xml_text)
@@ -93,7 +98,10 @@ def search_hydra(search_type, title, year="", imdb="", season="", episode=""):
             results = parse_results(xml_text)
         except (URLError, Exception) as e:
             xbmc.log(
-                "NZB-DAV: Hydra title fallback failed: {}".format(e), xbmc.LOGERROR
+                "NZB-DAV: Hydra title fallback failed: {} ({})".format(
+                    e, type(e).__name__
+                ),
+                xbmc.LOGERROR,
             )
             return [], "Search failed: {}".format(str(e)[:80])
 
@@ -144,7 +152,13 @@ def parse_results(xml_text):
                         from urllib.parse import urlparse
 
                         indexer = urlparse(indexer).hostname or ""
-                    except Exception:
+                    except Exception as e:
+                        xbmc.log(
+                            "NZB-DAV: Failed to parse indexer URL '{}': {} ({})".format(
+                                indexer, e, type(e).__name__
+                            ),
+                            xbmc.LOGWARNING,
+                        )
                         indexer = ""
 
         # Fallback: get size from enclosure
@@ -203,5 +217,11 @@ def _calculate_age(pubdate_str):
         if months == 1:
             return "1 month"
         return "{} months".format(months)
-    except Exception:
+    except Exception as e:
+        xbmc.log(
+            "NZB-DAV: Failed to calculate age for '{}': {} ({})".format(
+                pubdate_str, e, type(e).__name__
+            ),
+            xbmc.LOGDEBUG,
+        )
         return ""
