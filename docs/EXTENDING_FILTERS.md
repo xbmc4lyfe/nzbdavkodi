@@ -41,8 +41,8 @@ settings.
 ```
 
 > **Tip:** `label="30120"` references a string ID from
-> `resources/language/resource.language.en_gb/strings.po`. Add the matching entry
-> there so the Kodi UI shows a human-readable label:
+> `plugin.video.nzbdav/resources/language/resource.language.en_gb/strings.po`.
+> Add the matching entry there so the Kodi UI shows a human-readable label:
 >
 > ```po
 > msgctxt "#30120"
