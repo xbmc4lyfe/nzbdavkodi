@@ -30,15 +30,16 @@ _HOME_WINDOW = xbmcgui.Window(10000)
 class NzbdavPlayer(xbmc.Player):
     """Primary playback monitor hosted by the background service (service.py).
 
-    This is the production runtime player/monitor for the addon. Playback
-    monitoring now lives in ``service.py`` via ``NzbdavPlayer`` rather than in
-    any standalone ``playback_monitor.py`` module. The class is instantiated
-    once in ``main()`` and lives for the entire Kodi session.
+    This is the production runtime player/monitor for the addon. It is
+    instantiated once in ``main()`` and lives for the entire Kodi session.
 
-    The resolver signals a new stream by writing window properties
-    (``nzbdav.stream_url``, ``nzbdav.stream_title``, ``nzbdav.active``) to the
-    Kodi home window; the service loop calls ``tick()`` every second to pick
-    up that signal and handle automatic retry on playback errors.
+    Playback paths that write the home-window properties
+    (``nzbdav.stream_url``, ``nzbdav.stream_title``, ``nzbdav.active``) signal
+    a new stream to this service; the service loop calls ``tick()`` every
+    second to pick up that signal and handle automatic retry on playback
+    errors. Direct playback paths such as ``resolve_and_play()`` bypass these
+    IPC properties, so they are not monitored or retried by ``NzbdavPlayer``.
+
     Retry behaviour is driven by the addon settings ``stream_auto_retry``,
     ``stream_max_retries``, and ``stream_retry_delay``.
     """

@@ -227,7 +227,7 @@ With **Auto-select best match** enabled, the dialog is skipped and the top resul
 ### Commands
 
 ```bash
-just test          # Run all 233 tests
+just test          # Run all 236 tests
 just test-verbose  # Run tests with full output
 just lint          # Check ruff + black formatting
 just lint-fix      # Auto-fix lint issues
@@ -260,7 +260,6 @@ plugin.video.nzbdav/
       player_installer.py # TMDBHelper player JSON installer
       http_util.py       # Shared HTTP utilities
       i18n.py            # Localization helper
-      playback_monitor.py # Stream failure detection + retry
       ptt/               # Vendored PTT library (parse-torrent-title)
     language/             # Kodi localization files
     skins/Default/
@@ -280,7 +279,7 @@ repo/
   bandit.yml             # Bandit security scan
 tests/
   conftest.py            # Kodi module mocks
-  test_*.py              # 233 tests
+  test_*.py              # 236 tests
 ```
 
 ### Releasing
