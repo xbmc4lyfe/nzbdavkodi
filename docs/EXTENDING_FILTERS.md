@@ -49,10 +49,12 @@ Keep the return shape consistent — every filter-specific key should always exi
 Expose a field that signals CAM quality, using both PTT output and a fallback pattern:
 
 ```python
+import re
+
 quality = parsed.get("quality", "") or ""
 is_cam = quality.upper() in ("CAM", "TS")
 
-if not is_cam and "cam" in title.lower():
+if not is_cam and re.search(r"\b(?:CAM|TS)\b", title, re.IGNORECASE):
     is_cam = True  # fallback for loose titles
 
 return {
