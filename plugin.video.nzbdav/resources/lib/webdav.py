@@ -91,7 +91,8 @@ def check_file_available_with_retry(filename, max_retries=3, retry_delay=2):
         A two-tuple ``(available, error_type)``.
         ``available`` is ``True`` only when the server returns HTTP 200.
         ``error_type`` is ``None`` on success, or one of the strings:
-        ``"not_found"`` (HTTP 404 or other non-200/non-error status),
+        ``"not_found"`` (HTTP 404 or any other unexpected non-200 status
+        below 500, excluding 401 and 403),
         ``"auth_failed"`` (HTTP 401 or 403),
         ``"server_error"`` (HTTP 5xx), or
         ``"connection_error"`` (exception raised after all retries are
