@@ -32,8 +32,9 @@ manually typing `cam` into the exclude-keywords field.
 ### Step 1 — `resources/settings.xml`
 
 Add a `<setting>` element inside the appropriate `<category>` block. Boolean filters
-that exclude a specific type belong near the other quality/source controls (the
-`30052` category).
+that exclude a specific type belong near the other quality/source controls in the
+category that already contains the existing resolution/HDR/audio/codec-style filter
+settings.
 
 ```xml
 <setting id="filter_exclude_cam" label="30120" type="bool" default="false" />
