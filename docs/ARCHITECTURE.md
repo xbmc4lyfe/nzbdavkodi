@@ -57,7 +57,7 @@ If season/episode are missing, the router falls back to reading Kodi InfoLabels 
 
 Before hitting NZBHydra2, `get_cached()` checks for a previously stored result:
 
-- **Key**: filesystem-safe hash of `(search_type, title, year, imdb, season, episode)`.
+- **Key**: filesystem-safe key built from `(search_type, title, year, imdb, season, episode)` by sanitizing each component and joining them with underscores.
 - **Storage**: JSON files under the Kodi addon profile directory (`special://profile/addon_data/plugin.video.nzbdav/cache/`).
 - **TTL**: Configurable (default 300 s). Entries older than the TTL are ignored.
 - **Max size**: 50 MB. When exceeded, the oldest files are evicted.
