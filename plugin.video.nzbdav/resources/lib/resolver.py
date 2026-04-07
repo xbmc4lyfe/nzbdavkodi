@@ -328,6 +328,7 @@ def _poll_until_ready(nzb_url, title, dialog, poll_interval, download_timeout):
 
     while True:
         iteration += 1
+        elapsed = time.time() - start_time
         if iteration > MAX_POLL_ITERATIONS:
             xbmc.log(
                 "NZB-DAV: Max poll iterations ({}) reached for nzo_id={}".format(
@@ -335,10 +336,8 @@ def _poll_until_ready(nzb_url, title, dialog, poll_interval, download_timeout):
                 ),
                 xbmc.LOGERROR,
             )
-            _notify(_addon_name(), _string(30099))
+            _notify(_addon_name(), _fmt(30099, int(elapsed)))
             return None
-
-        elapsed = time.time() - start_time
 
         if elapsed >= download_timeout:
             xbmc.log(
