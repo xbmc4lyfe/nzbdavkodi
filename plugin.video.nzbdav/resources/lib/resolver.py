@@ -231,7 +231,8 @@ def _poll_once(nzo_id, title):
     """Poll nzbdav queue API and history API in parallel.
 
     Spawns two threads — one to query the active queue and one to query the
-    completed history — then waits up to 10 seconds for both to finish.  When
+    completed history — then joins each thread with a timeout of up to
+    10 seconds, so the combined wait may be up to about 20 seconds. When
     neither API returns a result (the job is not in the queue and not in
     history), a lightweight WebDAV HEAD check is performed to detect
     persistent configuration errors early.
