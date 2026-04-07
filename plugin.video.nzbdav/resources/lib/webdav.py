@@ -161,11 +161,29 @@ def check_file_available_with_retry(filename, max_retries=3, retry_delay=2):
 
 
 def find_video_file(folder_path, _depth=0):
-    """Browse a WebDAV folder and find the video file.
+    """Browse a WebDAV folder and find the largest video file.
 
-    Uses PROPFIND to list files, returns the path to the largest video file.
-    Recurses into subdirectories up to 2 levels deep if no video found.
-    Returns None if no video file found.
+    Uses PROPFIND to list files and recursively searches subdirectories
+    if no video file is found at the current level.
+
+    Args:
+        folder_path: WebDAV folder path to search (relative to WebDAV root).
+        _depth: Internal recursion depth counter (do not pass this argument).
+
+    Returns:
+        The full WebDAV path to the largest video file found, or None if
+        no video file exists in the folder or its subdirectories.
+
+    Side effects:
+        Makes an HTTP PROPFIND request to the WebDAV server for each
+        directory level searched. May make multiple requests if recursing.
+        Recurses into subdirectories up to 2 levels deep (_depth > 2 stops recursion).
+        Logs progress and results to xbmc.LOGINFO and xbmc.LOGDEBUG.
+        Logs errors to xbmc.LOGERROR on connection or parsing failures.
+
+    Performance:
+        Recursion stops at depth 2 to prevent excessive API calls and
+        timeouts on deeply nested directory structures.
     """
     import xml.etree.ElementTree as ET
 

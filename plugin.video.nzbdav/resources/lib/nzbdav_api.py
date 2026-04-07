@@ -22,6 +22,22 @@ def _get_settings():
 
 
 def submit_nzb(nzb_url, nzb_name=""):
+    """Submit an NZB URL to nzbdav for download.
+
+    Args:
+        nzb_url: URL to the NZB file (Newznab download link from NZBHydra2).
+        nzb_name: Optional human-readable title shown in nzbdav queue.
+
+    Returns:
+        The nzo_id string assigned by nzbdav, or None on failure.
+        None indicates either a connection error, invalid API response,
+        or missing nzo_ids in the response.
+
+    Side effects:
+        Makes an HTTP GET request to nzbdav's SABnzbd-compatible API.
+        Logs errors to xbmc.LOGERROR on failure.
+        Logs success with nzo_id to xbmc.LOGINFO.
+    """
     try:
         base_url, api_key = _get_settings()
     except Exception as e:
@@ -168,8 +184,16 @@ def find_completed_by_name(name):
 def get_completed_names():
     """Fetch all completed download names from nzbdav history.
 
-    Returns a set of name strings for fast membership testing.
-    Returns empty set on any error (non-blocking).
+    Returns:
+        A set of name strings for fast membership testing.
+        Returns empty set on any error (non-blocking).
+
+    Side effects:
+        Makes an HTTP GET request to nzbdav's history API on EVERY call.
+        The request fetches up to 500 history entries.
+        Callers should avoid calling this function in tight loops.
+        Consider caching the result if multiple lookups are needed.
+        Logs the number of names loaded to xbmc.LOGDEBUG on success.
     """
     try:
         base_url, api_key = _get_settings()

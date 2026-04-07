@@ -30,14 +30,24 @@ def search_hydra(search_type, title, year="", imdb="", season="", episode=""):
     Args:
         search_type: "movie" or "episode"
         title: Movie or show title
-        year: Release year
-        imdb: IMDb ID (e.g. "tt0133093")
-        season: Season number (TV only)
-        episode: Episode number (TV only)
+        year: Release year (optional)
+        imdb: IMDb ID, e.g. "tt0133093" (optional)
+        season: Season number for TV episodes (optional)
+        episode: Episode number for TV episodes (optional)
 
     Returns:
-        Tuple of (results, error) where results is a list of result dicts and
-        error is None on success or a string describing the failure.
+        Tuple of (results, error) where:
+        - results is a list of dicts, each containing 'title', 'link',
+          'size', 'indexer', 'pubdate', and 'age' keys.
+        - error is None on success or a string describing the failure.
+        Empty list is returned on errors or when no results are found.
+
+    Side effects:
+        Makes one or two HTTP GET requests to NZBHydra2's Newznab API.
+        If IMDB search returns no results, automatically retries with title search.
+        Logs search URLs (with API key redacted) to xbmc.LOGDEBUG.
+        Logs errors to xbmc.LOGERROR.
+        Logs result count to xbmc.LOGINFO.
     """
     try:
         base_url, api_key = _get_settings()

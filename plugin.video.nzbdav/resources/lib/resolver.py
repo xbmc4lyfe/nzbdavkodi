@@ -228,12 +228,30 @@ def _storage_to_webdav_path(storage):
 
 
 def _poll_once(nzo_id, title):
-    """Poll nzbdav queue API and history API in parallel.
+    """Poll nzbdav queue API and history API in parallel for job status.
 
-    Returns (job_status, history_status, error_type).
-    job_status is from the queue API (active downloads).
-    history_status is from the history API (completed downloads).
-    error_type is set if a WebDAV check encounters auth/server errors.
+    Checks both the active queue (for in-progress downloads) and the
+    history (for completed downloads) simultaneously using threads.
+    If neither API returns results, probes WebDAV to detect auth/server errors.
+
+    Args:
+        nzo_id: The nzbdav job ID to poll for.
+        title: The download title (used for WebDAV error probing).
+
+    Returns:
+        A three-tuple: (job_status, history_status, error_type).
+        - job_status: Dict from queue API with 'status', 'percentage', 'filename',
+          or None if the job is not in the active queue.
+        - history_status: Dict from history API with 'status', 'storage', 'name',
+          or None if the job is not in history.
+        - error_type: String indicating WebDAV error ('auth_failed', 'server_error',
+          'connection_error', 'not_found'), or None if no WebDAV probe was performed
+          or if the probe succeeded.
+
+    Side effects:
+        Spawns two threads to query nzbdav queue and history APIs concurrently.
+        May make an additional HTTP HEAD request to WebDAV if both APIs return None.
+        Logs poll results to xbmc.LOGDEBUG.
     """
     job_status = [None]
     history_status = [None]
