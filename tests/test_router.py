@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 from urllib.parse import urlencode
 
 from resources.lib.router import (
+    _clean_params,
     _format_info_line,
     _format_size,
     parse_params,
@@ -95,6 +96,50 @@ def test_parse_params_none():
     """None input should return empty params."""
     params = parse_params(None)
     assert params == {}
+
+
+# --- _clean_params tests (TMDBHelper '_' placeholder convention) ---
+
+
+def test_clean_params_replaces_underscore_with_empty_string():
+    """TMDBHelper sends '_' for absent optional fields; _clean_params normalises them."""
+    raw = {"type": "movie", "title": "The Matrix", "year": "_", "imdb": "_"}
+    cleaned = _clean_params(raw)
+    assert cleaned["year"] == "", "underscore placeholder should become empty string"
+    assert cleaned["imdb"] == "", "underscore placeholder should become empty string"
+
+
+def test_clean_params_preserves_real_values():
+    """_clean_params must not touch values that are not '_'."""
+    raw = {"type": "episode", "title": "Breaking Bad", "season": "5", "episode": "14"}
+    cleaned = _clean_params(raw)
+    assert cleaned == raw
+
+
+def test_clean_params_handles_all_underscore_params():
+    """All '_' values in a params dict are replaced, not just the first one."""
+    raw = {
+        "type": "_",
+        "title": "_",
+        "year": "_",
+        "imdb": "_",
+        "season": "_",
+        "episode": "_",
+    }
+    cleaned = _clean_params(raw)
+    assert all(v == "" for v in cleaned.values())
+
+
+def test_clean_params_empty_dict():
+    """_clean_params on an empty dict returns an empty dict."""
+    assert _clean_params({}) == {}
+
+
+def test_clean_params_mixed():
+    """Real values survive alongside underscore placeholders."""
+    raw = {"type": "episode", "title": "Chernobyl", "year": "_", "season": "1"}
+    cleaned = _clean_params(raw)
+    assert cleaned == {"type": "episode", "title": "Chernobyl", "year": "", "season": "1"}
 
 
 # --- _format_size tests ---

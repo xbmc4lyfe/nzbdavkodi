@@ -101,7 +101,24 @@ def route(argv):
 
 
 def _clean_params(params):
-    """Clean TMDBHelper params — replace '_' placeholders with empty strings."""
+    """Clean TMDBHelper params by replacing '_' placeholder values with empty strings.
+
+    TMDBHelper uses a single underscore ('_') as a placeholder when it has no value
+    for an optional parameter (e.g. year, imdb, season, episode).  This is an
+    artefact of how TMDBHelper serialises its player-config URL calls:
+    https://github.com/jurialmunkey/plugin.video.themoviedb.helper/blob/master/resources/tmdbhelper/lib/player/players.py
+
+    Without this normalisation, downstream code would receive the literal string '_'
+    instead of an empty string and produce broken search queries or incorrect
+    metadata lookups.
+
+    Args:
+        params (dict): Raw query-string parameters parsed from the plugin:// URL.
+
+    Returns:
+        dict: A new dict where every value equal to '_' has been replaced with ''.
+    """
+    # TMDBHelper sends '_' when a field has no value; treat it as absent.
     return {k: ("" if v == "_" else v) for k, v in params.items()}
 
 
