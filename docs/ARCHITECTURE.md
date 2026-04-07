@@ -226,7 +226,7 @@ When Kodi seeks (byte-range request past `_SEEK_THRESHOLD`), the proxy:
 
 #### Subtitle conversion
 
-By default, MP4 `mov_text` subtitle tracks are converted to SRT for MKV compatibility (`-c:s srt`). This can be disabled in settings (`convert_subtitles = false`), in which case subtitle streams are dropped.
+By default, MP4 `mov_text` subtitle tracks are converted to SRT for MKV compatibility (`-c:s srt`). This can be disabled in settings (`proxy_convert_subs = false`), in which case subtitle streams are dropped.
 
 #### Graceful fallback
 
