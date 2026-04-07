@@ -16,19 +16,21 @@ Goal: add a toggle that drops CAM/TS results.
 
 ### 1) Add the setting
 
-In `plugin.video.nzbdav/resources/settings.xml`, create a boolean in the Quality Filters category:
+In `plugin.video.nzbdav/resources/settings.xml`, create a boolean in the Quality Filters category.  Use the next unused `#30xxx` integer as the label ID (check the highest `msgctxt` value already in `strings.po` to find it):
 
 ```xml
-<setting id="filter_exclude_cam" label="30xxx" type="bool" default="true" />
+<setting id="filter_exclude_cam" label="30120" type="bool" default="true" />
 ```
 
 Add the matching label in `plugin.video.nzbdav/resources/language/resource.language.en_gb/strings.po` (and other locales as needed):
 
 ```po
-msgctxt "#30xxx"
+msgctxt "#30120"
 msgid "Exclude CAM / TS"
 msgstr "Exclude CAM / TS"
 ```
+
+Replace `30120` with the actual next available integer in your checkout (the example above assumes `#30119` is the current highest ID).
 
 ### 2) Read it in `_get_filter_settings()`
 
