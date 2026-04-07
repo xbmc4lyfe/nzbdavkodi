@@ -174,7 +174,10 @@ class NzbdavPlayer(xbmc.Player):
         li.setProperty("StartOffset", str(self._last_position))
         self.play(self._stream_url, li)
 
-        # Wait for playback to start or fail (10s timeout)
+        # Wait for playback to start or fail (10s timeout).
+        # State was reset to MONITORING above; any callback that changes it
+        # (onPlayBackError -> ERROR, onPlayBackStopped -> STOPPED,
+        # onPlayBackEnded -> IDLE) signals that the retry attempt is done.
         for _ in range(20):
             if self._state != PlaybackState.MONITORING:
                 break
@@ -186,6 +189,8 @@ class NzbdavPlayer(xbmc.Player):
             if self._monitor.waitForAbort(0.5):
                 return False
 
+        # Return True unless a new playback error occurred during this retry;
+        # STOPPED/IDLE (user-stopped or natural end) are treated as non-failures.
         return self._state != PlaybackState.ERROR
 
     def tick(self):
