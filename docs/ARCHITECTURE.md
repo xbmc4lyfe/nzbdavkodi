@@ -27,7 +27,7 @@ TMDBHelper ──plugin://──► router.py
                     ┌─────────┴──────────┐
                     │  Playback Phase     │
                     │  stream_proxy.py    │
-                    │  playback_monitor.py│
+                    │  service.py         │
                     └─────────────────────┘
 ```
 
