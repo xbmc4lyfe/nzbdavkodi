@@ -8,7 +8,7 @@ Adding a filter touches several spots. Use this checklist so the setting is visi
 4) `plugin.video.nzbdav/resources/lib/filter.py:matches_filters()` — apply the filter logic and return `False` when it should be excluded.
 5) `tests/test_filter.py` — add tests that cover the new setting, metadata parsing, and the acceptance/rejection path.
 
-Kodi modules should still be imported lazily (inside functions) to keep tests working.
+Tests in this repo mock the Kodi `xbmc*` modules, so lazy imports are not required just to keep tests working; follow the existing import style in the module you are editing, and only keep imports lazy where that module specifically depends on it.
 
 ## Worked Example: Exclude CAM Releases
 
