@@ -46,7 +46,7 @@ TMDBHelper calls the addon via a `plugin://` URL. `addon.py` passes `sys.argv` t
 | Parameter | Source | Used for |
 |-----------|--------|----------|
 | `title` | TMDBHelper | Search query |
-| `year` | TMDBHelper | Narrow movie results |
+| `year` | TMDBHelper | Cache key / UI context; not currently sent to NZBHydra2 to narrow results |
 | `imdb` | TMDBHelper | Preferred IMDB-based search |
 | `season` / `episode` | TMDBHelper or Kodi InfoLabels | TV episode lookup |
 | `type` | TMDBHelper | `"movie"` or `"episode"` |
