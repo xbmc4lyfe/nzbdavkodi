@@ -5,6 +5,7 @@
 
 import os
 import sys
+from enum import Enum
 
 # Add resources/lib/ to sys.path (same as addon.py)
 addon_dir = os.path.dirname(os.path.abspath(__file__))
@@ -27,18 +28,35 @@ _PROP_PROXY_PORT = "nzbdav.proxy_port"
 _HOME_WINDOW = xbmcgui.Window(10000)
 
 
+class PlaybackState(Enum):
+    """Explicit states for NzbdavPlayer's internal state machine."""
+
+    IDLE = "idle"  # No stream active
+    MONITORING = "monitoring"  # Stream playing, watching for errors
+    ERROR = "error"  # Error detected, evaluating retry
+    FAILED = "failed"  # Max retries exceeded, giving up
+    STOPPED = "stopped"  # User stopped playback
+
+
 class NzbdavPlayer(xbmc.Player):
-    """Persistent player that monitors NZB-DAV streams for failures."""
+    """Monitors nzbdav streams and retries on stall/error.
+
+    State transitions:
+        IDLE -> MONITORING  (_check_active, nzbdav URL detected)
+        MONITORING -> ERROR (onPlayBackError)
+        ERROR -> MONITORING (_retry_playback, retry succeeds)
+        ERROR -> FAILED     (tick, max retries exceeded)
+        MONITORING -> STOPPED (onPlayBackStopped by user)
+        * -> IDLE           (onPlayBackEnded naturally, or retry disabled)
+    """
 
     def __init__(self):
         super().__init__()
-        self._active = False
+        self._state = PlaybackState.IDLE
         self._stream_url = ""
         self._title = ""
         self._last_position = 0.0
         self._retry_count = 0
-        self._playback_error = False
-        self._playback_ended = False
         self._monitor = xbmc.Monitor()
 
     @staticmethod
@@ -64,10 +82,8 @@ class NzbdavPlayer(xbmc.Player):
         if active == "true":
             self._stream_url = _HOME_WINDOW.getProperty(_PROP_STREAM_URL)
             self._title = _HOME_WINDOW.getProperty(_PROP_STREAM_TITLE)
-            self._active = True
+            self._state = PlaybackState.MONITORING
             self._retry_count = 0
-            self._playback_error = False
-            self._playback_ended = False
             self._last_position = 0.0
             # Clear the signal so we don't re-trigger
             _HOME_WINDOW.clearProperty(_PROP_ACTIVE)
@@ -78,9 +94,8 @@ class NzbdavPlayer(xbmc.Player):
 
     def onAVStarted(self):
         """Reset retry state when playback begins successfully."""
-        if self._active:
+        if self._state == PlaybackState.MONITORING:
             self._retry_count = 0
-            self._playback_error = False
             xbmc.log(
                 "NZB-DAV: Playback started for '{}'".format(self._title),
                 xbmc.LOGINFO,
@@ -88,28 +103,30 @@ class NzbdavPlayer(xbmc.Player):
 
     def onPlayBackStopped(self):
         """Mark stream inactive when user stops playback."""
-        if self._active:
+        if self._state in (PlaybackState.MONITORING, PlaybackState.ERROR):
             xbmc.log(
                 "NZB-DAV: Playback stopped for '{}'".format(self._title),
                 xbmc.LOGINFO,
             )
-            self._active = False
-            self._playback_ended = True
+            self._state = PlaybackState.STOPPED
 
     def onPlayBackEnded(self):
         """Mark stream inactive when playback finishes naturally."""
-        if self._active:
+        if self._state in (
+            PlaybackState.MONITORING,
+            PlaybackState.ERROR,
+            PlaybackState.FAILED,
+        ):
             xbmc.log(
                 "NZB-DAV: Playback completed for '{}'".format(self._title),
                 xbmc.LOGINFO,
             )
-            self._active = False
-            self._playback_ended = True
+            self._state = PlaybackState.IDLE
 
     def onPlayBackError(self):
         """Flag playback error for retry logic and notify if retries exhausted."""
-        if self._active:
-            self._playback_error = True
+        if self._state == PlaybackState.MONITORING:
+            self._state = PlaybackState.ERROR
             xbmc.log(
                 "NZB-DAV: Playback error for '{}' (retry {})".format(
                     self._title, self._retry_count
@@ -133,7 +150,7 @@ class NzbdavPlayer(xbmc.Player):
     def _retry_playback(self, max_retries, retry_delay):
         """Attempt to resume playback from last known position."""
         self._retry_count += 1
-        self._playback_error = False
+        self._state = PlaybackState.MONITORING  # Transition: ERROR -> MONITORING
 
         xbmc.log(
             "NZB-DAV: Retrying '{}' from {:.0f}s ({}/{})".format(
@@ -159,7 +176,7 @@ class NzbdavPlayer(xbmc.Player):
 
         # Wait for playback to start or fail (10s timeout)
         for _ in range(20):
-            if self._playback_ended or self._playback_error:
+            if self._state != PlaybackState.MONITORING:
                 break
             try:
                 if self.isPlaying():
@@ -169,23 +186,23 @@ class NzbdavPlayer(xbmc.Player):
             if self._monitor.waitForAbort(0.5):
                 return False
 
-        return not self._playback_error
+        return self._state != PlaybackState.ERROR
 
     def tick(self):
         """Called each service loop iteration. Handle retries if needed."""
         self._check_active()
 
-        if not self._active:
+        if self._state not in (PlaybackState.MONITORING, PlaybackState.ERROR):
             return
 
         self._save_position()
 
-        if not self._playback_error:
+        if self._state != PlaybackState.ERROR:
             return
 
         enabled, max_retries, retry_delay = self._read_settings()
         if not enabled:
-            self._active = False
+            self._state = PlaybackState.IDLE
             return
 
         if self._retry_count >= max_retries:
@@ -198,11 +215,11 @@ class NzbdavPlayer(xbmc.Player):
             from resources.lib.i18n import fmt as _f
 
             _notify("NZB-DAV", _f(30116, max_retries), 8000)
-            self._active = False
+            self._state = PlaybackState.FAILED
             return
 
         if not self._retry_playback(max_retries, retry_delay):
-            self._active = False
+            self._state = PlaybackState.FAILED
 
 
 def main():
