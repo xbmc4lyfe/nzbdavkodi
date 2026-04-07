@@ -3,7 +3,7 @@
 
 from unittest.mock import MagicMock, patch
 
-from resources.lib.http_util import http_get, notify, redact_url
+from resources.lib.http_util import format_size, http_get, notify, redact_url
 
 
 @patch("resources.lib.http_util.urlopen")
@@ -58,3 +58,42 @@ def test_redact_url_preserves_url_without_apikey():
     url = "http://example.com/api?mode=history&limit=200"
     result = redact_url(url)
     assert result == url
+
+
+# ---------------------------------------------------------------------------
+# format_size
+# ---------------------------------------------------------------------------
+
+
+def test_format_size_gigabytes():
+    assert format_size(1073741824) == "1.0 GB"
+
+
+def test_format_size_gigabytes_large():
+    assert format_size(107374182400) == "100.0 GB"
+
+
+def test_format_size_megabytes():
+    assert format_size(5242880) == "5.0 MB"
+
+
+def test_format_size_megabytes_decimal():
+    assert format_size(10485760) == "10.0 MB"
+
+
+def test_format_size_bytes():
+    assert format_size(512) == "512 B"
+
+
+def test_format_size_none_returns_empty():
+    assert format_size(None) == ""
+
+
+def test_format_size_zero_returns_empty():
+    assert format_size(0) == ""
+
+
+def test_format_size_string_input():
+    """format_size should accept string byte counts as received from NZB data."""
+    assert format_size("1073741824") == "1.0 GB"
+    assert format_size("5242880") == "5.0 MB"
