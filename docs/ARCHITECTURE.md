@@ -134,7 +134,7 @@ Before submitting the NZB, `find_completed_by_name()` queries nzbdav's history A
 The NZB URL is submitted to nzbdav's SABnzbd-compatible API:
 
 ```
-POST /api?mode=addurl&name=<nzb_url>&nzbname=<title>&apikey=<key>&output=json
+GET /api?mode=addurl&name=<nzb_url>&nzbname=<title>&apikey=<key>&output=json
 ```
 
 On success, nzbdav returns a JSON body with `nzo_ids: ["<id>"]`.
