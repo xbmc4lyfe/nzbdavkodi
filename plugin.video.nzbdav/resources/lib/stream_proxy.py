@@ -77,7 +77,13 @@ def _parse_ffmpeg_duration(stderr_text):
     )
 
 
-_SEEK_THRESHOLD = 10 * 1024 * 1024  # 10MB
+# Byte-offset delta used to distinguish a Kodi buffer-reconnect from a
+# user-initiated seek. When Kodi reconnects after a brief network hiccup it
+# resumes very close to where it left off; a true seek jumps further.
+# 10 MB was chosen empirically: large enough to ignore normal buffering
+# overlap, small enough to catch seeks that would noticeably re-position
+# the stream. Adjust if you observe unnecessary ffmpeg restarts in logs.
+_SEEK_THRESHOLD = 10 * 1024 * 1024
 
 
 def _is_seek_request(current_byte_pos, requested_byte_pos):
@@ -309,6 +315,9 @@ class _StreamHandler(BaseHTTPRequestHandler):
         total = 0
         try:
             while True:
+                # 64KB chunks balance responsiveness vs system call overhead.
+                # Smaller chunks would increase CPU usage from frequent reads;
+                # larger chunks would delay Kodi's buffer progress updates.
                 chunk = proc.stdout.read(65536)
                 if not chunk:
                     break
@@ -353,6 +362,9 @@ class _StreamHandler(BaseHTTPRequestHandler):
             if ctx.get("auth_header"):
                 req.add_header("Authorization", ctx["auth_header"])
 
+            # 120 second timeout allows large files to start streaming over
+            # slow networks. WebDAV servers may buffer initial data before
+            # responding, especially for range requests into large files.
             with urlopen(req, timeout=120) as resp:  # nosec B310
                 self.send_response(206)
                 self.send_header("Content-Type", ctx["content_type"])
@@ -366,6 +378,9 @@ class _StreamHandler(BaseHTTPRequestHandler):
                 self.end_headers()
 
                 while True:
+                    # 1MB chunks for direct proxy mode reduce HTTP round-trips
+                    # while keeping memory footprint reasonable. This is larger
+                    # than the remux chunk size since no transcoding overhead.
                     chunk = resp.read(1048576)
                     if not chunk:
                         break
@@ -417,6 +432,9 @@ class StreamProxy:
 
     def start(self):
         """Start the proxy server on a random port."""
+        # Bind to 127.0.0.1 (localhost only) for security — external access
+        # is not needed. Port 0 tells the OS to assign a random available port,
+        # avoiding conflicts with other services.
         self._server = _ThreadedHTTPServer(("127.0.0.1", 0), _StreamHandler)
         self._server.owner_proxy = self
         self.port = self._server.server_address[1]
@@ -434,6 +452,8 @@ class StreamProxy:
             self._server.shutdown()
             self._server = None
         if self._thread:
+            # 5 seconds is generous for clean shutdown; the daemon threads
+            # typically stop within milliseconds once serve_forever() exits.
             self._thread.join(timeout=5)
             self._thread = None
 
@@ -509,6 +529,9 @@ class StreamProxy:
                     proc.kill()
                     proc.wait()
                     return result
+            # 30 second timeout for ffmpeg to parse file headers. Most files
+            # complete in <5s; 30s accommodates slow WebDAV servers or
+            # network hiccups during initial probe.
             proc.wait(timeout=30)
             return _parse_ffmpeg_duration(collected)
         except (OSError, subprocess.SubprocessError, ValueError) as e:
@@ -522,6 +545,9 @@ class StreamProxy:
         if auth_header:
             req.add_header("Authorization", auth_header)
         try:
+            # 10 second timeout for HEAD is sufficient for metadata-only
+            # requests. If the server doesn't respond in 10s, it's likely
+            # experiencing issues and we should fall back to range probe.
             with urlopen(req, timeout=10) as resp:  # nosec B310
                 return int(resp.headers.get("Content-Length", 0))
         except (OSError, ValueError):
@@ -531,6 +557,8 @@ class StreamProxy:
             req.add_header("Range", "bytes=-1")
             if auth_header:
                 req.add_header("Authorization", auth_header)
+            # 10 second timeout for fallback range probe. This fetches only
+            # the last byte, so should be quick even on slow connections.
             with urlopen(req, timeout=10) as resp:  # nosec B310
                 cr = resp.headers.get("Content-Range", "")
                 return int(cr.split("/")[1]) if "/" in cr else 0
@@ -570,6 +598,8 @@ def prepare_stream_via_service(port, remote_url, auth_header=None):
     data = json.dumps({"remote_url": remote_url, "auth_header": auth_header})
     req = Request(url, data=data.encode(), method="POST")
     req.add_header("Content-Type", "application/json")
+    # 60 second timeout accommodates large file probing. The service must
+    # probe duration and content-length before returning the proxy URL.
     with urlopen(req, timeout=60) as resp:  # nosec B310
         result = json.loads(resp.read())
         return result["proxy_url"]
