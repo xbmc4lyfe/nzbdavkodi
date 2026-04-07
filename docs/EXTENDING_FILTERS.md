@@ -2,10 +2,10 @@
 
 Adding a filter touches several spots. Use this checklist so the setting is visible, read, parsed, enforced, and tested:
 
-1) `plugin.video.nzbdav/resources/settings.xml` — add the UI control (and a label in `resources/language/.../strings.po`).
-2) `resources/lib/filter.py:_get_filter_settings()` — read the new setting and normalize it into the settings dict.
-3) `resources/lib/filter.py:parse_title_metadata()` (and `_fallback_parse()` if needed) — extract the metadata needed by the filter.
-4) `resources/lib/filter.py:matches_filters()` — apply the filter logic and return `False` when it should be excluded.
+1) `plugin.video.nzbdav/resources/settings.xml` — add the UI control (and a label in `plugin.video.nzbdav/resources/language/.../strings.po`).
+2) `plugin.video.nzbdav/resources/lib/filter.py:_get_filter_settings()` — read the new setting and normalize it into the settings dict.
+3) `plugin.video.nzbdav/resources/lib/filter.py:parse_title_metadata()` (and `_fallback_parse()` if needed) — extract the metadata needed by the filter.
+4) `plugin.video.nzbdav/resources/lib/filter.py:matches_filters()` — apply the filter logic and return `False` when it should be excluded.
 5) `tests/test_filter.py` — add tests that cover the new setting, metadata parsing, and the acceptance/rejection path.
 
 Kodi modules should still be imported lazily (inside functions) to keep tests working.
