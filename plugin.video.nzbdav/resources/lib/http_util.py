@@ -31,3 +31,20 @@ def notify(heading, message, duration=5000):
     import xbmc
 
     xbmc.executebuiltin("Notification({}, {}, {})".format(heading, message, duration))
+
+
+def format_size(size_bytes):
+    """Format a byte count as a human-readable string."""
+    if size_bytes is None:
+        return ""
+    try:
+        size_int = int(size_bytes)
+    except (TypeError, ValueError):
+        return ""
+    if size_int <= 0:
+        return ""
+    if size_int >= 1073741824:
+        return "{:.1f} GB".format(size_int / 1073741824)
+    if size_int >= 1048576:
+        return "{:.1f} MB".format(size_int / 1048576)
+    return "{} B".format(size_int)

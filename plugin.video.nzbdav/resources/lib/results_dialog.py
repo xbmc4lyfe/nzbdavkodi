@@ -8,6 +8,7 @@ import xbmcgui
 
 from resources.lib.i18n import fmt as _fmt
 from resources.lib.i18n import string as _string
+from resources.lib.http_util import format_size
 
 # Color constants matching the mockup
 _RES_COLORS = {
@@ -118,7 +119,7 @@ class ResultsDialog(xbmcgui.WindowXMLDialog):
             li.setProperty("quality", _c(src_display, src_color))
 
             # Size
-            li.setProperty("size", _c(_format_size(result.get("size")), "FFA1A1AA"))
+            li.setProperty("size", _c(format_size(result.get("size")), "FFA1A1AA"))
 
             # Age
             li.setProperty("age", _c(result.get("age", ""), "FF6B7280"))
@@ -188,18 +189,6 @@ def show_results_dialog(results, title="", year="", total_count=0):
     if 0 <= idx < len(results):
         return results[idx]
     return None
-
-
-def _format_size(size_bytes):
-    """Format byte size to human readable."""
-    if not size_bytes:
-        return ""
-    size_bytes = int(size_bytes)
-    if size_bytes >= 1073741824:
-        return "{:.1f} GB".format(size_bytes / 1073741824)
-    if size_bytes >= 1048576:
-        return "{:.0f} MB".format(size_bytes / 1048576)
-    return "{} B".format(size_bytes)
 
 
 def _format_date(pubdate):

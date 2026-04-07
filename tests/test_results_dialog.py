@@ -5,10 +5,10 @@ from unittest.mock import MagicMock, patch
 
 from resources.lib.results_dialog import (
     _format_date,
-    _format_size,
     _lang_short,
     show_results_dialog,
 )
+from resources.lib.http_util import format_size
 
 
 def _make_result(**overrides):
@@ -90,33 +90,33 @@ def test_show_results_dialog_empty_results_returns_none():
 
 
 # ---------------------------------------------------------------------------
-# _format_size
+# format_size
 # ---------------------------------------------------------------------------
 
 
 def test_format_size_gigabytes():
-    assert _format_size(2 * 1024**3) == "2.0 GB"
+    assert format_size(2 * 1024**3) == "2.0 GB"
 
 
 def test_format_size_megabytes():
-    assert _format_size(512 * 1024**2) == "512 MB"
+    assert format_size(512 * 1024**2) == "512.0 MB"
 
 
 def test_format_size_bytes():
-    assert _format_size(1000) == "1000 B"
+    assert format_size(1000) == "1000 B"
 
 
 def test_format_size_none_returns_empty():
-    assert _format_size(None) == ""
+    assert format_size(None) == ""
 
 
 def test_format_size_zero_returns_empty():
-    assert _format_size(0) == ""
+    assert format_size(0) == ""
 
 
 def test_format_size_string_input():
-    """_format_size should accept string input (as received from parsed NZB data)."""
-    assert _format_size("1073741824") == "1.0 GB"
+    """format_size should accept string input (as received from parsed NZB data)."""
+    assert format_size("1073741824") == "1.0 GB"
 
 
 # ---------------------------------------------------------------------------

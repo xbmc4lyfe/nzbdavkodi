@@ -4,9 +4,9 @@
 from unittest.mock import MagicMock, patch
 from urllib.parse import urlencode
 
+from resources.lib.http_util import format_size
 from resources.lib.router import (
     _format_info_line,
-    _format_size,
     parse_params,
     parse_route,
     route,
@@ -97,43 +97,43 @@ def test_parse_params_none():
     assert params == {}
 
 
-# --- _format_size tests ---
+# --- format_size tests ---
 
 
 def test_format_size_gb():
-    assert _format_size(5368709120) == "5.0 GB"
+    assert format_size(5368709120) == "5.0 GB"
 
 
 def test_format_size_mb():
-    assert _format_size(10485760) == "10.0 MB"
+    assert format_size(10485760) == "10.0 MB"
 
 
 def test_format_size_bytes():
-    assert _format_size(512) == "512 B"
+    assert format_size(512) == "512 B"
 
 
 def test_format_size_none():
-    assert _format_size(None) == "N/A"
+    assert format_size(None) == ""
 
 
 def test_format_size_zero():
-    assert _format_size(0) == "N/A"
+    assert format_size(0) == ""
 
 
 def test_format_size_very_large():
     """100 GB file."""
-    assert _format_size(107374182400) == "100.0 GB"
+    assert format_size(107374182400) == "100.0 GB"
 
 
 def test_format_size_string_input():
-    """_format_size should handle string input by converting to int."""
+    """format_size should handle string input by converting to int."""
     # Sizes from NZBHydra come as strings
     assert (
-        _format_size("5368709120") == "5.0 GB"
-    ), "_format_size should accept string byte counts"
+        format_size("5368709120") == "5.0 GB"
+    ), "format_size should accept string byte counts"
     assert (
-        _format_size("10485760") == "10.0 MB"
-    ), "_format_size should handle MB string input"
+        format_size("10485760") == "10.0 MB"
+    ), "format_size should handle MB string input"
 
 
 # --- route() dispatch tests ---
