@@ -118,9 +118,12 @@ return {
 }
 ```
 
-> **Always add new keys to `_fallback_parse()` as well** (at the bottom of
-> `filter.py`). The fallback runs when PTT fails or returns empty; any key missing
-> from it will raise `KeyError` in `matches_filters()` for some titles.
+> **Always update `_fallback_parse()` as well** (at the bottom of `filter.py`)
+> when adding a new metadata attribute. The fallback runs when PTT fails or
+> returns empty, so it needs to populate that value for titles that rely on the
+> fallback path. If `matches_filters()` raises `KeyError`, that usually means the
+> key was not added to the metadata dict returned by `parse_title_metadata()`
+> (or an expected setting is missing), not simply that `_fallback_parse()` omitted it.
 
 ---
 
