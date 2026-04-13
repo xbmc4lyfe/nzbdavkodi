@@ -280,6 +280,90 @@ def test_prepare_stream_proxies_mkv():
     assert ctx["content_length"] == 100000
 
 
+def test_prepare_stream_forces_remux_for_large_mkv():
+    """Large MKV above threshold must route through ffmpeg remux so Kodi
+    never sees a >4 GB Content-Length — the pass-through path overflows on
+    32-bit Kodi builds with `Open - Unhandled exception`."""
+    from resources.lib.stream_proxy import StreamProxy
+
+    sp = StreamProxy.__new__(StreamProxy)
+    sp._server = MagicMock()
+    sp._context_lock = __import__("threading").Lock()
+    sp.port = 9999
+
+    huge = 15 * 1024 * 1024 * 1024  # 15 GB
+    mock_proc = MagicMock()
+    mock_proc.stderr = iter([b"  Duration: 01:00:00.00, start: 0.000000\n"])
+
+    with patch(
+        "resources.lib.stream_proxy._find_ffmpeg", return_value="/usr/bin/ffmpeg"
+    ), patch.object(sp, "_get_content_length", return_value=huge), patch(
+        "resources.lib.stream_proxy.subprocess.Popen", return_value=mock_proc
+    ):
+        sp.prepare_stream("http://host/film.mkv")
+
+    ctx = sp._server.stream_context
+    assert ctx["remux"] is True
+    assert ctx["content_type"] == "video/x-matroska"
+    assert ctx["total_bytes"] == huge
+    assert ctx["duration_seconds"] == 3600.0
+    assert ctx["seekable"] is True
+    # Pass-through content_length must NOT be set — the MKV response MUST
+    # be streamed with no Content-Length so Kodi can't overflow on it.
+    assert "content_length" not in ctx
+
+
+def test_prepare_stream_large_mkv_falls_back_without_ffmpeg():
+    """If ffmpeg is missing we can't force remux; fall back to pass-through
+    and let the user know why their large file will fail."""
+    from resources.lib.stream_proxy import StreamProxy
+
+    sp = StreamProxy.__new__(StreamProxy)
+    sp._server = MagicMock()
+    sp._context_lock = __import__("threading").Lock()
+    sp.port = 9999
+
+    huge = 15 * 1024 * 1024 * 1024
+
+    with patch(
+        "resources.lib.stream_proxy._find_ffmpeg", return_value=None
+    ), patch.object(sp, "_get_content_length", return_value=huge):
+        sp.prepare_stream("http://host/film.mkv")
+
+    ctx = sp._server.stream_context
+    assert ctx["remux"] is False
+    assert ctx["content_length"] == huge
+
+
+def test_prepare_stream_respects_disabled_threshold():
+    """Setting the threshold to 0 disables force remux entirely even for
+    huge files — escape hatch for users who know their platform is fine."""
+    import sys
+
+    from resources.lib.stream_proxy import StreamProxy
+
+    sp = StreamProxy.__new__(StreamProxy)
+    sp._server = MagicMock()
+    sp._context_lock = __import__("threading").Lock()
+    sp.port = 9999
+
+    huge = 15 * 1024 * 1024 * 1024
+
+    mock_addon = MagicMock()
+    mock_addon.getSetting.return_value = "0"
+    original = sys.modules["xbmcaddon"].Addon.return_value
+    sys.modules["xbmcaddon"].Addon.return_value = mock_addon
+    try:
+        with patch.object(sp, "_get_content_length", return_value=huge):
+            sp.prepare_stream("http://host/film.mkv")
+    finally:
+        sys.modules["xbmcaddon"].Addon.return_value = original
+
+    ctx = sp._server.stream_context
+    assert ctx["remux"] is False
+    assert ctx["content_length"] == huge
+
+
 def test_prepare_stream_rejects_invalid_scheme():
     import pytest
     from resources.lib.stream_proxy import StreamProxy
@@ -294,10 +378,15 @@ def test_prepare_stream_rejects_invalid_scheme():
 
 
 def test_prepare_stream_uses_unique_session_urls():
+    """Each prepare_stream must produce a unique session URL, and the
+    previous session must be torn down so at most one session is live
+    at a time (prevents zombie ffmpeg processes from lingering after a
+    Kodi stall that never fired onPlayBackStopped)."""
     from resources.lib.stream_proxy import StreamProxy
 
     sp = StreamProxy.__new__(StreamProxy)
     sp._server = MagicMock()
+    sp._server.stream_sessions = {}
     sp._context_lock = __import__("threading").Lock()
     sp.port = 9999
 
@@ -306,7 +395,9 @@ def test_prepare_stream_uses_unique_session_urls():
         url2, _ = sp.prepare_stream("http://host/two.mkv")
 
     assert url1 != url2
-    assert len(sp._server.stream_sessions) == 2
+    # The second prepare_stream must have cleared the first session.
+    assert len(sp._server.stream_sessions) == 1
+    assert url2.rsplit("/", 1)[-1] in sp._server.stream_sessions
 
 
 def test_prepare_stream_falls_back_to_proxy_without_ffmpeg():
@@ -479,6 +570,23 @@ def test_build_ffmpeg_cmd_includes_subs_by_default():
     assert "srt" in cmd
 
 
+def test_build_ffmpeg_cmd_copies_subs_for_mkv_input():
+    """For MKV inputs the subtitle codec must be `copy`, not `srt`.
+    PGS/DVD/HDMV bitmap subs can't be re-encoded to SRT and would abort
+    the entire remux; `copy` handles every subtitle codec losslessly."""
+    handler = _make_handler()
+    ctx = {
+        "ffmpeg_path": "/usr/bin/ffmpeg",
+        "remote_url": "http://host/film.mkv",
+        "auth_header": None,
+    }
+    cmd = handler._build_ffmpeg_cmd(ctx)
+    assert "0:s?" in cmd
+    idx = cmd.index("-c:s")
+    assert cmd[idx + 1] == "copy"
+    assert "srt" not in cmd
+
+
 def test_build_ffmpeg_cmd_excludes_subs_when_setting_off():
     """When proxy_convert_subs is false, no subtitle flags."""
     import sys
@@ -628,6 +736,119 @@ def test_serve_remux_explicit_seek_kills_existing():
 
     old_proc.kill.assert_called_once()
     old_proc.wait.assert_called_once()
+
+
+def test_serve_remux_write_timeout_exits_loop():
+    """If wfile.write raises socket.timeout (Kodi stopped consuming without
+    closing the TCP connection) the loop must break and the finally block
+    must kill ffmpeg. Otherwise a DB-vacuum-style stall leaves a zombie
+    ffmpeg writing into a dead socket forever."""
+    import socket
+
+    ctx = {
+        "remote_url": "http://host/film.mkv",
+        "auth_header": None,
+        "ffmpeg_path": "/usr/bin/ffmpeg",
+        "total_bytes": 15 * 1024 * 1024 * 1024,
+        "duration_seconds": 3600.0,
+        "seekable": True,
+        "remux": True,
+    }
+
+    handler = _make_handler_with_server(ctx)
+    # First write returns normally, second raises — simulates the socket
+    # send buffer filling up and the timeout firing on the second chunk.
+    handler.wfile.write.side_effect = [None, socket.timeout("timed out")]
+
+    mock_proc = MagicMock()
+    mock_proc.stdout.read.side_effect = [b"chunk1", b"chunk2", b""]
+    mock_proc.stderr.read.return_value = b""
+
+    with patch("resources.lib.stream_proxy.subprocess.Popen", return_value=mock_proc):
+        handler._serve_remux(ctx)
+
+    # ffmpeg MUST be killed on timeout — otherwise it leaks
+    mock_proc.kill.assert_called()
+    mock_proc.wait.assert_called()
+
+
+def test_serve_remux_sets_socket_write_timeout():
+    """The remux handler must set a socket write timeout on the connection
+    before streaming, so a blocked write from a half-dead client can't hang
+    the handler thread indefinitely."""
+    from resources.lib.stream_proxy import _REMUX_WRITE_TIMEOUT
+
+    ctx = {
+        "remote_url": "http://host/film.mkv",
+        "auth_header": None,
+        "ffmpeg_path": "/usr/bin/ffmpeg",
+        "total_bytes": 15 * 1024 * 1024 * 1024,
+        "duration_seconds": 3600.0,
+        "seekable": True,
+        "remux": True,
+    }
+
+    handler = _make_handler_with_server(ctx)
+    handler.connection = MagicMock()
+
+    mock_proc = MagicMock()
+    mock_proc.stdout.read.return_value = b""
+    mock_proc.stderr.read.return_value = b""
+
+    with patch("resources.lib.stream_proxy.subprocess.Popen", return_value=mock_proc):
+        handler._serve_remux(ctx)
+
+    handler.connection.settimeout.assert_called_once_with(_REMUX_WRITE_TIMEOUT)
+
+
+def test_prepare_stream_clears_previous_sessions():
+    """A second prepare_stream call must tear down ffmpeg processes from
+    any prior session before registering the new one. Prevents zombie
+    remux ffmpegs from surviving across Kodi plays when the player stalls
+    without firing onPlayBackStopped."""
+    from resources.lib.stream_proxy import StreamProxy
+
+    sp = StreamProxy.__new__(StreamProxy)
+    sp._server = MagicMock()
+    sp._server.stream_sessions = {}
+    sp._context_lock = __import__("threading").Lock()
+    sp.port = 9999
+
+    # First play — set up a session with a fake-running ffmpeg attached.
+    with patch.object(sp, "_get_content_length", return_value=100000):
+        sp.prepare_stream("http://host/one.mkv")
+    old_session = next(iter(sp._server.stream_sessions.values()))
+    old_proc = MagicMock()
+    old_session["active_ffmpeg"] = old_proc
+
+    # Second play — the old ffmpeg must be killed, the old session dropped.
+    with patch.object(sp, "_get_content_length", return_value=200000):
+        sp.prepare_stream("http://host/two.mkv")
+
+    old_proc.kill.assert_called_once()
+    old_proc.wait.assert_called_once()
+    assert len(sp._server.stream_sessions) == 1
+
+
+def test_clear_sessions_kills_all_ffmpegs():
+    """StreamProxy.clear_sessions must kill every registered ffmpeg."""
+    from resources.lib.stream_proxy import StreamProxy
+
+    sp = StreamProxy.__new__(StreamProxy)
+    sp._server = MagicMock()
+    sp._context_lock = __import__("threading").Lock()
+
+    proc_a, proc_b = MagicMock(), MagicMock()
+    sp._server.stream_sessions = {
+        "a": {"active_ffmpeg": proc_a},
+        "b": {"active_ffmpeg": proc_b},
+    }
+
+    sp.clear_sessions()
+
+    proc_a.kill.assert_called_once()
+    proc_b.kill.assert_called_once()
+    assert sp._server.stream_sessions == {}
 
 
 def test_serve_remux_non_seekable_no_ss():
@@ -845,3 +1066,184 @@ def test_head_uses_session_path_context():
 
     handler.send_response.assert_called_once_with(200)
     assert ctx["last_access"] > 0
+
+
+# ---------------------------------------------------------------------------
+# _serve_proxy — pass-through with zero-fill recovery for missing articles
+# ---------------------------------------------------------------------------
+
+
+def _mock_urlopen_response(chunks, status=206):
+    """Build a mock urlopen-returned object with given byte chunks."""
+    resp = MagicMock()
+    resp.__enter__ = MagicMock(return_value=resp)
+    resp.__exit__ = MagicMock(return_value=False)
+    data = list(chunks) + [b""]
+    resp.read = MagicMock(side_effect=data)
+    resp.status = status
+    resp.getcode = MagicMock(return_value=status)
+    resp.close = MagicMock()
+    return resp
+
+
+def _collect_written(handler):
+    """Return all bytes written to handler.wfile as a single bytes object."""
+    total = b""
+    for call in handler.wfile.write.call_args_list:
+        arg = call[0][0]
+        total += bytes(arg)
+    return total
+
+
+def test_serve_proxy_streams_happy_path():
+    """Upstream delivers all bytes — client gets them verbatim."""
+    ctx = {
+        "remote_url": "http://host/movie.mkv",
+        "auth_header": None,
+        "content_type": "video/x-matroska",
+        "content_length": 2048,
+    }
+    handler = _make_handler_with_server(ctx, range_header="bytes=0-2047")
+
+    payload = b"A" * 2048
+    with patch(
+        "resources.lib.stream_proxy.urlopen",
+        return_value=_mock_urlopen_response([payload]),
+    ):
+        handler._serve_proxy(ctx)
+
+    handler.send_response.assert_called_once_with(206)
+    assert _collect_written(handler) == payload
+
+
+def test_serve_proxy_zero_fills_on_upstream_failure():
+    """Upstream cuts out mid-stream — proxy probes, zero-fills, resumes."""
+    ctx = {
+        "remote_url": "http://host/movie.mkv",
+        "auth_header": None,
+        "content_type": "video/x-matroska",
+        "content_length": 20 * 1048576,
+    }
+    handler = _make_handler_with_server(
+        ctx, range_header="bytes=0-{}".format(20 * 1048576 - 1)
+    )
+
+    # Responses in order:
+    # 1. Initial range 0..end: delivers 1 MB of real bytes then upstream closes
+    # 2. Skip probe at +1 MB: success, returns 64 bytes
+    # 3. Resume stream at offset 2M..end: delivers remaining 18 MB
+    first_mb = b"X" * 1048576
+    initial = _mock_urlopen_response([first_mb])
+    probe_1mb = _mock_urlopen_response([b"Y" * 64])
+    resume_payload = b"Z" * (18 * 1048576)
+    resume = _mock_urlopen_response([resume_payload])
+
+    responses = iter([initial, probe_1mb, resume])
+
+    with patch(
+        "resources.lib.stream_proxy.urlopen",
+        side_effect=lambda *a, **kw: next(responses),
+    ), patch("resources.lib.stream_proxy.time.sleep"):
+        handler._serve_proxy(ctx)
+
+    written = _collect_written(handler)
+    assert len(written) == 20 * 1048576
+    assert written[:1048576] == first_mb
+    # Bytes 1M..2M are zero-fill (skip of 1 MB after the 1 MB already served).
+    assert written[1048576 : 2 * 1048576] == bytes(1048576)
+    assert written[2 * 1048576 :] == resume_payload
+
+
+def test_serve_proxy_retries_probes_when_upstream_briefly_down():
+    """If all early probes fail fast, retry with backoff before giving up."""
+    ctx = {
+        "remote_url": "http://host/movie.mkv",
+        "auth_header": None,
+        "content_type": "video/x-matroska",
+        "content_length": 8 * 1048576,
+    }
+    handler = _make_handler_with_server(
+        ctx, range_header="bytes=0-{}".format(8 * 1048576 - 1)
+    )
+
+    first_chunk = b"X" * 1048576
+    initial = _mock_urlopen_response([first_chunk])
+    # First two probe attempts raise ConnectionRefusedError (instant fail),
+    # third attempt succeeds — simulates a brief upstream restart.
+    probe_refused_1 = MagicMock()
+    probe_refused_1.__enter__ = MagicMock(side_effect=ConnectionRefusedError())
+    probe_refused_2 = MagicMock()
+    probe_refused_2.__enter__ = MagicMock(side_effect=ConnectionRefusedError())
+    probe_success = _mock_urlopen_response([b"Y" * 64])
+
+    resume_payload = b"Z" * (6 * 1048576)
+    resume = _mock_urlopen_response([resume_payload])
+
+    responses = iter([initial, probe_refused_1, probe_refused_2, probe_success, resume])
+
+    with patch(
+        "resources.lib.stream_proxy.urlopen",
+        side_effect=lambda *a, **kw: next(responses),
+    ), patch("resources.lib.stream_proxy.time.sleep") as mock_sleep:
+        handler._serve_proxy(ctx)
+
+    # sleep was called at least twice (between retry attempts).
+    assert mock_sleep.call_count >= 2
+    written = _collect_written(handler)
+    assert len(written) == 8 * 1048576
+    assert written[:1048576] == first_chunk
+    assert written[2 * 1048576 :] == resume_payload
+
+
+def test_serve_proxy_zero_fills_remainder_when_recovery_exhausted():
+    """All skip probes fail — zero-fill the rest of the committed response."""
+    ctx = {
+        "remote_url": "http://host/movie.mkv",
+        "auth_header": None,
+        "content_type": "video/x-matroska",
+        "content_length": 8 * 1048576,
+    }
+    handler = _make_handler_with_server(
+        ctx, range_header="bytes=0-{}".format(8 * 1048576 - 1)
+    )
+
+    first_chunk = b"X" * 512000
+    initial = _mock_urlopen_response([first_chunk])
+
+    def _fail_probe(*args, **kwargs):
+        raise OSError("article not found")
+
+    responses = iter([initial])
+
+    def _dispatch(*args, **kwargs):
+        try:
+            return next(responses)
+        except StopIteration:
+            return _fail_probe()
+
+    with patch("resources.lib.stream_proxy.urlopen", side_effect=_dispatch), patch(
+        "resources.lib.stream_proxy.time.sleep"
+    ):
+        handler._serve_proxy(ctx)
+
+    written = _collect_written(handler)
+    assert len(written) == 8 * 1048576
+    assert written[:512000] == first_chunk
+    # Everything after the real bytes is zero-filled.
+    assert written[512000:] == bytes(8 * 1048576 - 512000)
+
+
+def test_serve_proxy_rejects_bad_range():
+    """An unparseable Range header still returns 416 without emitting headers."""
+    ctx = {
+        "remote_url": "http://host/movie.mkv",
+        "auth_header": None,
+        "content_type": "video/x-matroska",
+        "content_length": 1000,
+    }
+    handler = _make_handler_with_server(ctx, range_header="bytes=banana")
+
+    handler._serve_proxy(ctx)
+
+    handler.send_error.assert_called_once_with(416)
+    handler.send_response.assert_not_called()

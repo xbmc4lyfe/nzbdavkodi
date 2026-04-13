@@ -68,6 +68,33 @@ _FFMPEG_PATHS = [
     "/storage/.opt/bin/ffmpeg",
 ]
 
+# Pass-through proxy recovery constants
+_UPSTREAM_OPEN_TIMEOUT = 30
+_SKIP_PROBE_TIMEOUT = 10
+# Geometric skip sizes for probing past a bad article region. 1 MB covers a
+# single missing article (~700 KB). 16 MB covers a cluster of ~20 articles.
+_SKIP_PROBE_SIZES = (1048576, 4194304, 16777216)
+# When a probe fails fast (ConnectionRefused from docker-proxy during nzbdav
+# restart, TCP RST, or immediate HTTP error) we back off and retry before
+# moving to the next skip size. This gives a briefly-unavailable upstream a
+# chance to recover instead of declaring the stream dead in milliseconds.
+_PROBE_RETRY_DELAYS = (2, 4, 6, 8)
+# Wall-clock budget for a single recovery attempt. After this the proxy
+# zero-fills the remainder so the client response always completes.
+_MAX_RECOVERY_SECONDS = 30
+# Cap zero-filled bytes per response to prevent runaway silent playback when
+# an NZB is mostly corrupt. 64 MB ≈ several seconds of 4K REMUX video.
+_MAX_TOTAL_ZERO_FILL = 67108864
+# Shared zero buffer reused across all pass-through responses.
+_ZERO_FILL_BUFFER = bytes(65536)
+
+# Socket write timeout for _serve_remux.  If Kodi stops reading from the
+# proxy socket without closing it (decoder stalls for too long, e.g. during
+# a long DB vacuum) wfile.write() would block forever and ffmpeg would keep
+# producing output into the void.  60s comfortably exceeds any normal
+# buffering stall on a healthy client while still bounding zombie lifetime.
+_REMUX_WRITE_TIMEOUT = 60
+
 
 def _find_ffmpeg():
     """Find an ffmpeg binary on the system."""
@@ -76,6 +103,30 @@ def _find_ffmpeg():
         if found:
             return found
     return None
+
+
+# Default threshold above which non-MP4 files are force-remuxed through
+# ffmpeg instead of served as HTTP pass-through. 4 GiB matches the 32-bit
+# file offset boundary that triggers Kodi's `Open - Unhandled exception`
+# on Amlogic/CoreELEC builds. Setting to 0 disables force remux entirely.
+_DEFAULT_FORCE_REMUX_THRESHOLD_MB = 4096
+
+
+def _get_force_remux_threshold_bytes():
+    """Return the remux-force threshold in bytes, or 0 to disable."""
+    try:
+        import xbmcaddon
+
+        raw = xbmcaddon.Addon().getSetting("force_remux_threshold_mb")
+    except Exception:  # noqa: BLE001 — Kodi module may not exist
+        raw = None
+    try:
+        mb = int(raw) if raw not in (None, "") else _DEFAULT_FORCE_REMUX_THRESHOLD_MB
+    except (TypeError, ValueError):
+        mb = _DEFAULT_FORCE_REMUX_THRESHOLD_MB
+    if mb <= 0:
+        return 0
+    return mb * 1024 * 1024
 
 
 def _validate_url(url):
@@ -309,13 +360,19 @@ class _StreamHandler(BaseHTTPRequestHandler):
         # Use explicit per-stream copy to avoid -c copy overriding -c:s srt
         cmd.extend(["-c:v", "copy", "-c:a", "copy"])
 
-        # Subtitle conversion (toggleable via setting)
+        # Subtitle handling (toggleable via setting).
+        # For MP4 input we convert text subs (mov_text/TX3G) to SRT so MKV
+        # output is more compatible.  For MKV input we must use `copy` —
+        # PGS/DVD/HDMV bitmap subs can't be re-encoded to SRT and would
+        # abort the remux; ASS/SSA/SRT all copy fine into MKV anyway.
         try:
             import xbmcaddon
 
             convert_subs = xbmcaddon.Addon().getSetting("proxy_convert_subs")
             if convert_subs != "false":
-                cmd.extend(["-map", "0:s?", "-c:s", "srt"])
+                src_is_mkv = input_url.split("?", 1)[0].lower().endswith(".mkv")
+                sub_codec = "copy" if src_is_mkv else "srt"
+                cmd.extend(["-map", "0:s?", "-c:s", sub_codec])
         except Exception:  # noqa: BLE001 — Kodi module may not exist
             pass  # outside Kodi context (tests), skip subtitle setting
 
@@ -538,7 +595,7 @@ class _StreamHandler(BaseHTTPRequestHandler):
 
         cmd = self._build_ffmpeg_cmd(ctx, seek_seconds=seek_seconds)
         xbmc.log(
-            "NZB-DAV: Remuxing MP4->MKV (seek={})".format(seek_seconds),
+            "NZB-DAV: Remuxing to MKV (seek={})".format(seek_seconds),
             xbmc.LOGINFO,
         )
 
@@ -594,8 +651,22 @@ class _StreamHandler(BaseHTTPRequestHandler):
         self.send_header("Connection", "close")
         self.end_headers()
 
+        # Give the socket a write timeout.  If Kodi stops consuming bytes
+        # without closing the TCP connection — which happens when Kodi's
+        # decoder is stalled by a long operation like a DB vacuum and the
+        # player enters limbo instead of firing onPlayBackStopped — the
+        # socket send buffer fills up and wfile.write() would block forever.
+        # A timeout here guarantees the loop eventually raises, runs the
+        # finally block, and kills ffmpeg instead of leaving a zombie.
+        try:
+            self.connection.settimeout(_REMUX_WRITE_TIMEOUT)
+        except (OSError, AttributeError):
+            pass
+
         # Stream ffmpeg output to Kodi.  Duration is written into the MKV
         # header by ffmpeg via -metadata DURATION= (see _build_ffmpeg_cmd).
+        import socket as _socket
+
         total = 0
         try:
             while True:
@@ -608,7 +679,7 @@ class _StreamHandler(BaseHTTPRequestHandler):
                     current_pos = requested_start + total
                     ctx["current_byte_pos"] = current_pos
                     self.server.current_byte_pos = current_pos
-        except (BrokenPipeError, ConnectionResetError):
+        except (BrokenPipeError, ConnectionResetError, _socket.timeout):
             xbmc.log(
                 "NZB-DAV: Remux client disconnected after {} MB".format(
                     total // 1048576
@@ -633,7 +704,16 @@ class _StreamHandler(BaseHTTPRequestHandler):
             )
 
     def _serve_proxy(self, ctx):
-        """Proxy range requests directly to remote."""
+        """Proxy range requests to remote with missing-article recovery.
+
+        Missing or unfetchable usenet articles cause nzbdav to either 416 or
+        hang mid-stream on the byte ranges that depend on them. Rather than
+        killing playback with a black screen, this routine streams what
+        upstream can serve, probes forward to locate a readable offset past
+        the bad region, zero-fills the gap, and resumes. MKV/MP4 demuxers
+        typically tolerate a few seconds of corrupted bytes as a brief
+        playback glitch.
+        """
         content_length = ctx["content_length"]
         range_header = self.headers.get("Range")
 
@@ -645,39 +725,153 @@ class _StreamHandler(BaseHTTPRequestHandler):
         else:
             start, end = 0, content_length - 1
 
+        total_bytes = end - start + 1
+        self.send_response(206)
+        self.send_header("Content-Type", ctx["content_type"])
+        self.send_header("Content-Length", str(total_bytes))
+        self.send_header("Accept-Ranges", "bytes")
+        self.send_header(
+            "Content-Range", "bytes {}-{}/{}".format(start, end, content_length)
+        )
+        self.send_header("Connection", "keep-alive")
+        self.end_headers()
+
+        current = start
+        total_skipped = 0
+
         try:
-            req = Request(ctx["remote_url"])
-            req.add_header("Range", "bytes={}-{}".format(start, end))
-            if ctx.get("auth_header"):
-                req.add_header("Authorization", ctx["auth_header"])
+            while current <= end:
+                written = self._stream_upstream_range(ctx, current, end)
+                current += written
+                if current > end:
+                    return
 
-            # 2-minute timeout: large WebDAV files over a local LAN can be
-            # slow to begin transferring; 120 s avoids a premature error while
-            # still bounding the hang if the server goes silent mid-stream.
-            with urlopen(req, timeout=120) as resp:  # nosec B310
-                self.send_response(206)
-                self.send_header("Content-Type", ctx["content_type"])
-                self.send_header("Content-Length", str(end - start + 1))
-                self.send_header("Accept-Ranges", "bytes")
-                self.send_header(
-                    "Content-Range",
-                    "bytes {}-{}/{}".format(start, end, content_length),
+                remaining = end - current + 1
+                skip = self._find_skip_offset(ctx, current, end)
+
+                if skip is None or total_skipped + skip > _MAX_TOTAL_ZERO_FILL:
+                    xbmc.log(
+                        "NZB-DAV: Zero-fill recovery exhausted at byte {} "
+                        "(filling remaining {} bytes)".format(current, remaining),
+                        xbmc.LOGERROR,
+                    )
+                    self._write_zeros(remaining)
+                    return
+
+                self._write_zeros(skip)
+                total_skipped += skip
+                current += skip
+                xbmc.log(
+                    "NZB-DAV: Zero-filled {} bytes at offset {} to skip bad "
+                    "usenet articles".format(skip, current - skip),
+                    xbmc.LOGWARNING,
                 )
-                self.send_header("Connection", "keep-alive")
-                self.end_headers()
-
-                while True:
-                    # 1 MB: balances memory pressure and the number of write()
-                    # syscalls when proxying large files.
-                    chunk = resp.read(1048576)
-                    if not chunk:
-                        break
-                    self.wfile.write(chunk)
         except (BrokenPipeError, ConnectionResetError):
             pass
+
+    def _stream_upstream_range(self, ctx, start, end):
+        """Stream bytes from upstream to the client.
+
+        Returns the count of bytes successfully written to the client.
+        A short return indicates upstream failed or went silent; the caller
+        is responsible for recovery. BrokenPipeError / ConnectionResetError
+        propagate out so the caller can abort cleanly.
+        """
+        req = Request(ctx["remote_url"])
+        req.add_header("Range", "bytes={}-{}".format(start, end))
+        if ctx.get("auth_header"):
+            req.add_header("Authorization", ctx["auth_header"])
+
+        written = 0
+        try:
+            resp = urlopen(req, timeout=_UPSTREAM_OPEN_TIMEOUT)  # nosec B310
         except (OSError, ValueError) as e:
-            xbmc.log("NZB-DAV: Proxy range failed: {}".format(e), xbmc.LOGERROR)
-            _notify_error(e)
+            xbmc.log(
+                "NZB-DAV: Proxy upstream open failed at byte {}: {}".format(start, e),
+                xbmc.LOGWARNING,
+            )
+            return 0
+
+        try:
+            while True:
+                try:
+                    chunk = resp.read(1048576)
+                except (OSError, ValueError) as e:
+                    xbmc.log(
+                        "NZB-DAV: Proxy upstream read failed at byte {}: {}".format(
+                            start + written, e
+                        ),
+                        xbmc.LOGWARNING,
+                    )
+                    return written
+                if not chunk:
+                    return written
+                self.wfile.write(chunk)
+                written += len(chunk)
+        finally:
+            try:
+                resp.close()
+            except OSError:
+                pass
+
+    def _find_skip_offset(self, ctx, failed_byte, range_end):
+        """Probe forward to find a skip size past a bad article region.
+
+        Tries progressively larger skips and confirms upstream can serve a
+        small range starting at the new offset. Each skip size is retried
+        with backoff so a briefly-unavailable upstream (restart, transient
+        network blip) has a chance to come back before we declare the
+        region unrecoverable. Returns the skip in bytes or None if the
+        recovery budget is exhausted.
+        """
+        start_time = time.time()
+        for skip in _SKIP_PROBE_SIZES:
+            target = failed_byte + skip
+            if target > range_end:
+                return None
+            probe_end = min(target + 1023, range_end)
+
+            delays = (0,) + _PROBE_RETRY_DELAYS
+            for delay in delays:
+                if time.time() - start_time >= _MAX_RECOVERY_SECONDS:
+                    return None
+                if delay:
+                    time.sleep(delay)
+                req = Request(ctx["remote_url"])
+                req.add_header("Range", "bytes={}-{}".format(target, probe_end))
+                if ctx.get("auth_header"):
+                    req.add_header("Authorization", ctx["auth_header"])
+                try:
+                    with urlopen(
+                        req, timeout=_SKIP_PROBE_TIMEOUT
+                    ) as resp:  # nosec B310
+                        status = getattr(resp, "status", None) or resp.getcode()
+                        if status in (200, 206):
+                            resp.read(64)
+                            elapsed = time.time() - start_time
+                            xbmc.log(
+                                "NZB-DAV: Probe succeeded at +{} bytes after "
+                                "{:.1f}s".format(skip, elapsed),
+                                xbmc.LOGINFO,
+                            )
+                            return skip
+                except (OSError, ValueError) as e:
+                    xbmc.log(
+                        "NZB-DAV: Probe at +{} bytes failed ({}): {}".format(
+                            skip, type(e).__name__, e
+                        ),
+                        xbmc.LOGDEBUG,
+                    )
+                    continue
+        return None
+
+    def _write_zeros(self, count):
+        """Write 'count' zero bytes to the client in fixed-size chunks."""
+        remaining = count
+        while remaining > 0:
+            chunk_size = min(remaining, len(_ZERO_FILL_BUFFER))
+            self.wfile.write(_ZERO_FILL_BUFFER[:chunk_size])
+            remaining -= chunk_size
 
     @staticmethod
     def _parse_range(range_header, content_length):
@@ -735,18 +929,34 @@ class StreamProxy:
 
     def stop(self):
         """Stop the proxy server."""
-        if self._server:
-            with self._context_lock:
-                sessions = list(getattr(self._server, "stream_sessions", {}).values())
-                self._server.stream_sessions = {}
-            for ctx in sessions:
-                self._cleanup_session(ctx)
+        self.clear_sessions()
         if self._server:
             self._server.shutdown()
             self._server = None
         if self._thread:
             self._thread.join(timeout=5)
             self._thread = None
+
+    def clear_sessions(self):
+        """Tear down every registered session and kill its ffmpeg process.
+
+        Called from:
+        - stop() on service shutdown
+        - prepare_stream() on each new play, so a zombie ffmpeg from a
+          previous stream that Kodi abandoned without firing onPlayBackStopped
+          (e.g. DB-vacuum stall that freezes the decoder) doesn't keep
+          writing into a half-dead TCP socket forever
+        - NzbdavPlayer stop/end hooks for clean-stop cases
+        """
+        if not self._server:
+            return
+        with self._context_lock:
+            sessions = list(getattr(self._server, "stream_sessions", {}).values())
+            self._server.stream_sessions = {}
+            self._server.stream_context = None
+            self._server.active_ffmpeg = None
+        for ctx in sessions:
+            self._cleanup_session(ctx)
 
     @staticmethod
     def _try_faststart_layout(remote_url, content_length, auth_header):
@@ -863,6 +1073,13 @@ class StreamProxy:
         faststart, and virtual_size.
         """
         _validate_url(remote_url)
+        # Tear down any previous session before starting a new one. Kodi only
+        # ever plays one stream at a time, so anything still in the table is
+        # garbage from a prior play — possibly with a zombie ffmpeg attached
+        # to a half-dead socket if Kodi stalled without firing
+        # onPlayBackStopped. Cleaning up here guarantees the next play gets a
+        # fresh proxy state and no stale ffmpeg hogging the upstream.
+        self.clear_sessions()
         content_type = self._detect_content_type(remote_url)
         lower_url = remote_url.lower()
         is_mp4 = lower_url.endswith((".mp4", ".m4v"))
@@ -980,13 +1197,49 @@ class StreamProxy:
                     }
         else:
             content_length = self._get_content_length(remote_url, auth_header)
-            ctx = {
-                "remote_url": remote_url,
-                "auth_header": auth_header,
-                "content_length": content_length,
-                "content_type": content_type,
-                "remux": False,
-            }
+            threshold = _get_force_remux_threshold_bytes()
+            needs_remux = bool(threshold) and content_length >= threshold
+            ffmpeg_path = _find_ffmpeg() if needs_remux else None
+            if ffmpeg_path:
+                # 32-bit Kodi builds (Amlogic CoreELEC and similar) throw
+                # `Open - Unhandled exception` on pass-through HTTP when the
+                # advertised Content-Length exceeds ~4 GB — a cache/offset
+                # overflow inside Kodi itself that no proxy tweak can fix.
+                # Force a remux through ffmpeg so Kodi sees a streamed MKV
+                # with no Content-Length and no byte-range seeking, the same
+                # shape the MP4 fallback already uses successfully.
+                duration = self._probe_duration(ffmpeg_path, remote_url, auth_header)
+                ctx = {
+                    "remote_url": remote_url,
+                    "auth_header": auth_header,
+                    "content_type": "video/x-matroska",
+                    "remux": True,
+                    "faststart": False,
+                    "ffmpeg_path": ffmpeg_path,
+                    "total_bytes": content_length,
+                    "duration_seconds": duration,
+                    "seekable": duration is not None and content_length > 0,
+                }
+                xbmc.log(
+                    "NZB-DAV: Forcing ffmpeg remux for large {}B file "
+                    "(threshold={}B)".format(content_length, threshold),
+                    xbmc.LOGWARNING,
+                )
+            else:
+                if needs_remux:
+                    xbmc.log(
+                        "NZB-DAV: {}B file exceeds remux threshold but no "
+                        "ffmpeg found — falling back to pass-through, "
+                        "playback may fail on 32-bit Kodi".format(content_length),
+                        xbmc.LOGWARNING,
+                    )
+                ctx = {
+                    "remote_url": remote_url,
+                    "auth_header": auth_header,
+                    "content_length": content_length,
+                    "content_type": content_type,
+                    "remux": False,
+                }
 
         local_url = self._register_session(ctx)
         xbmc.log(
