@@ -56,6 +56,10 @@ _FALLBACK_STRINGS = {
         "nzbdav rejected the submission (HTTP {0}). "
         "Server message: {1}. Check nzbdav's logs for details."
     ),
+    30140: "Large non-MP4 stream mode",
+    30141: "Matroska remux (compatibility)",
+    30142: "fMP4 HLS (compatibility, experimental)",
+    30152: "Direct pass-through (default)",
     30170: "Fallback Streams",
     30171: "Submit duplicate releases as live fallbacks",
     30172: "Maximum fallback releases",
