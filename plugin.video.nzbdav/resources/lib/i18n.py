@@ -56,6 +56,11 @@ _FALLBACK_STRINGS = {
         "nzbdav rejected the submission (HTTP {0}). "
         "Server message: {1}. Check nzbdav's logs for details."
     ),
+    30170: "Fallback Streams",
+    30171: "Submit duplicate releases as live fallbacks",
+    30172: "Maximum fallback releases",
+    30173: "Switched to fallback stream",
+    30174: "No matching fallback stream available",
 }
 
 
