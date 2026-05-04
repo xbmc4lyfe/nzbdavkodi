@@ -188,6 +188,8 @@ def route(argv):
             _test_hydra_connection()
         elif path == "/test_prowlarr":
             _test_prowlarr_connection()
+        elif path == "/test_direct_indexers":
+            _test_direct_indexers_connection()
         elif path == "/test_nzbdav":
             _test_nzbdav_connection()
         else:
@@ -230,8 +232,9 @@ def _search_all_providers(search_type, title, year="", imdb="", season="", episo
     """
     Search enabled indexer providers and return combined, deduplicated results.
 
-    Searches configured providers (NZBHydra2 and/or Prowlarr), merges their
-    results, and removes duplicate entries by `link`. If no providers are
+    Searches configured providers (NZBHydra2, Prowlarr, and/or direct
+    Newznab indexers), merges their results, and removes duplicate entries by
+    `link`. If no providers are
     enabled, returns an explicit error message. If every enabled provider
     failed and produced no results, returns the first collected error.
 
@@ -253,11 +256,15 @@ def _search_all_providers(search_type, title, year="", imdb="", season="", episo
     nzbhydra_raw = addon.getSetting("nzbhydra_enabled")
     nzbhydra_enabled = nzbhydra_raw.lower() != "false"
     prowlarr_enabled = addon.getSetting("prowlarr_enabled").lower() == "true"
+    direct_indexers_enabled = (
+        addon.getSetting("direct_indexers_enabled").lower() == "true"
+    )
 
-    if not nzbhydra_enabled and not prowlarr_enabled:
+    if not nzbhydra_enabled and not prowlarr_enabled and not direct_indexers_enabled:
         return (
             [],
-            "No search providers enabled. Enable NZBHydra2 or Prowlarr in settings.",
+            "No search providers enabled. Enable NZBHydra2, Prowlarr, "
+            "or direct indexers in settings.",
         )
 
     all_results = []
@@ -292,6 +299,21 @@ def _search_all_providers(search_type, title, year="", imdb="", season="", episo
             errors.append(prowlarr_error)
         else:
             all_results.extend(prowlarr_results)
+
+    if direct_indexers_enabled:
+        from resources.lib.direct_indexers import search_direct_indexers
+
+        direct_results, direct_error = search_direct_indexers(
+            search_type, title, year=year, imdb=imdb, season=season, episode=episode
+        )
+        if direct_error:
+            xbmc.log(
+                "NZB-DAV: Direct indexer search error: {}".format(direct_error),
+                xbmc.LOGWARNING,
+            )
+            errors.append(direct_error)
+        else:
+            all_results.extend(direct_results)
 
     seen_links = set()
     deduped = []
@@ -910,6 +932,20 @@ def _test_prowlarr_connection():
             "Prowlarr: {}".format(err_msg[:60]),
             5000,
         )
+
+
+def _test_direct_indexers_connection():
+    """Test configured direct Newznab indexer caps endpoints."""
+    from resources.lib.direct_indexers import test_configured_indexers
+    from resources.lib.http_util import notify
+
+    ok_count, total_count, errors = test_configured_indexers()
+    if total_count == 0:
+        notify(_addon_name(), _string(30176), 3000)
+    elif ok_count == total_count:
+        notify(_addon_name(), _fmt(30177, ok_count, total_count), 3000)
+    else:
+        notify(_addon_name(), _fmt(30178, errors[0] if errors else "unknown"), 5000)
 
 
 def _test_nzbdav_connection():

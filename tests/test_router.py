@@ -220,6 +220,83 @@ def test_route_dispatches_to_install_player(mock_install):
     assert True, "route() with /install_player should complete without error"
 
 
+@patch("xbmcaddon.Addon")
+def test_search_all_providers_calls_direct_indexers_when_enabled(mock_addon):
+    from resources.lib.router import _search_all_providers
+
+    addon = MagicMock()
+    addon.getSetting.side_effect = lambda key: {
+        "nzbhydra_enabled": "false",
+        "prowlarr_enabled": "false",
+        "direct_indexers_enabled": "true",
+    }.get(key, "")
+    mock_addon.return_value = addon
+
+    direct_search = MagicMock(
+        return_value=(
+            [
+                {
+                    "title": "The.Matrix.1999.1080p-GRP",
+                    "link": "https://indexer/api?t=get&id=1&apikey=secret",
+                    "size": "123",
+                    "indexer": "NZBGeek",
+                    "pubdate": "",
+                    "age": "",
+                }
+            ],
+            None,
+        )
+    )
+
+    with patch.dict(
+        "sys.modules",
+        {
+            "resources.lib.direct_indexers": MagicMock(
+                search_direct_indexers=direct_search
+            )
+        },
+    ):
+        results, error = _search_all_providers(
+            "episode",
+            "Breaking Bad",
+            year="2008",
+            imdb="tt0903747",
+            season="5",
+            episode="14",
+        )
+
+    assert error is None
+    assert len(results) == 1
+    direct_search.assert_called_once_with(
+        "episode",
+        "Breaking Bad",
+        year="2008",
+        imdb="tt0903747",
+        season="5",
+        episode="14",
+    )
+
+
+@patch("xbmcaddon.Addon")
+def test_search_all_providers_no_provider_error_mentions_direct_indexers(
+    mock_addon,
+):
+    from resources.lib.router import _search_all_providers
+
+    addon = MagicMock()
+    addon.getSetting.side_effect = lambda key: {
+        "nzbhydra_enabled": "false",
+        "prowlarr_enabled": "false",
+        "direct_indexers_enabled": "false",
+    }.get(key, "")
+    mock_addon.return_value = addon
+
+    results, error = _search_all_providers("movie", "The Matrix")
+
+    assert not results
+    assert "direct indexers" in error
+
+
 # --- _safe_resolve_handle + action route handle-resolution tests ---
 #
 # Action routes (install_player, clear_cache, settings, configure_*,
@@ -372,6 +449,25 @@ def test_route_test_prowlarr_resolves_handle(mock_test, mock_resolved):
     mock_test.assert_called_once()
     assert mock_resolved.called
     assert mock_resolved.call_args[0][0] == 10
+    assert mock_resolved.call_args[0][1] is False
+
+
+@patch("xbmcplugin.setResolvedUrl")
+def test_route_test_direct_indexers_resolves_handle(mock_resolved):
+    """Route /test_direct_indexers and resolve the action handle."""
+    test_configured = MagicMock(return_value=(1, 1, []))
+    with patch.dict(
+        "sys.modules",
+        {
+            "resources.lib.direct_indexers": MagicMock(
+                test_configured_indexers=test_configured
+            )
+        },
+    ):
+        route(["plugin://plugin.video.nzbdav/test_direct_indexers", "12", ""])
+    test_configured.assert_called_once()
+    assert mock_resolved.called
+    assert mock_resolved.call_args[0][0] == 12
     assert mock_resolved.call_args[0][1] is False
 
 
